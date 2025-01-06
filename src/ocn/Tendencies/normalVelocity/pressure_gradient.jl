@@ -18,7 +18,7 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
 
     @unpack maxLevelEdge = VertMesh 
-    @unpack nEdges, dcEdge, cellsOnEdge = Edges
+    @unpack nEdges, dcEdge, cellsOnEdge, edgeMask = Edges
    
     # get the current timelevel of ssh 
     ssh = Prog.ssh[end] #[:,end]
@@ -34,6 +34,7 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
             cellsOnEdge,
             dcEdge,
             maxLevelEdge.Top,
+            edgeMask,
             ndrange=nEdges)
     # sync the backend 
     KA.synchronize(backend)
@@ -46,7 +47,8 @@ end
                                 @Const(ssh),
                                 @Const(cellsOnEdge), 
                                 @Const(dcEdge), 
-                                @Const(maxLevelEdgeTop))
+                                @Const(maxLevelEdgeTop),
+                                @Const(edgeMask))
 
     # global indices over nEdges
     iEdge = @index(Global, Linear)
@@ -60,6 +62,7 @@ end
   
     for k in 1:maxLevelEdgeTop[iEdge]
         # gradient on edges calculation 
-        tendency[k, iEdge] -= 9.80616 * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
+        tendency[k, iEdge] -= 9.80616 * edgeMask[k, iEdge] * \
+                              (ssh[jCell2] - ssh[jCell1]) * InvDcEdge
     end
 end

@@ -1,10 +1,11 @@
+using OffsetArrays
 import Adapt
 
 mutable struct VerticalMesh{I, IV, FV, AL}
     nVertLevels::I
 
-    minLevelCell::IV
     maxLevelCell::IV
+
     maxLevelEdge::AL
     maxLevelVertex::AL
 
@@ -25,39 +26,75 @@ mutable struct ActiveLevels{IV}
     Bot::IV
 end
 
+function padded_index_array(dimLength; backend=KA.CPU, eltype=Int32)
+    OffsetArray(KA.zeros(backend, eltype, dimLength + 1), 0:dimLength)
+end
+
 """
 ActiveLevels constructor for a nVertLevel stacked *periodic* meshes
 """
-function ActiveLevels(dim, eltype, backend, nVertLevels)
-    Top = KA.ones(backend, eltype, dim) #.* eltype(nVertLevels)
-    Bot = KA.ones(backend, eltype, dim) #.* eltype(nVertLevels)
+function ActiveLevels(dim, eltype, backend)
+    Top = KA.ones(backend, eltype, dim)
+    Bot = KA.ones(backend, eltype, dim)
 
     return ActiveLevels(Top, Bot)
 end
 
-function ActiveLevels{Edge}(mesh; backend=KA.CPU(), nVertLevels=1)
-    return ActiveLevels(mesh.Edges.nEdges, Int32, backend, nVertLevels)
+function ActiveLevels{Edge}(maxLevelCell, h_mesh; backend=KA.CPU())
+    
+    @unpack nEdges, cellsOnEdge = h_mesh.Edges
+
+    # Top is the minimum (shallowest) of the surrounding cells
+    Top = padded_index_array(nEdges; backend=backend) 
+    # Bot is the maximum (deepest) of the surrounding cells
+    Bot = padded_index_array(nEdges; backend=backend)
+    
+    for iEdge in 1:nEdges
+        @inbounds iCell1 = cellsOnEdge[1, iEdge] 
+        @inbounds iCell2 = cellsOnEdge[2, iEdge] 
+
+        Top[iEdge] = min(maxLevelCell[iCell1], maxLevelCell[iCell2])
+        Bot[iEdge] = max(maxLevelCell[iCell1], maxLevelCell[iCell2])
+    end
+
+    return ActiveLevels(Top, Bot)
 end
 
-function ActiveLevels{Vertex}(mesh; backend=KA.CPU(), nVertLevels=1)
-    ActiveLevels(mesh.DualCells.nVertices, Int32, backend, nVertLevels)
+function ActiveLevels{Vertex}(maxLevelCell, h_mesh; backend=KA.CPU())
+
+    @unpack nVertices, cellsOnVertex, vertexDegree = h_mesh.DualCells
+
+    # Top is the minimum (shallowest) of the surrounding cells
+    Top = padded_index_array(nVertices; backend=backend) 
+    # Bot is the maximum (deepest) of the surrounding cells
+    Bot = padded_index_array(nVertices; backend=backend)
+
+    for iVertex in 1:nVertices
+        # get vector indices of the cellsOnVertex (e.g. (3,))
+        cellsOnVertex_i = [cellsOnVertex[i, iVertex] for i in 1:vertexDegree]
+
+        Top[iVertex] = minimum(maxLevelCell[cellsOnVertex_i])
+        Bot[iVertex] = maximum(maxLevelCell[cellsOnVertex_i])
+    end
+
+    return ActiveLevels(Top, Bot)
 end
 
 function VerticalMesh(mesh_fp, mesh; backend=KA.CPU())
     
     ds = NCDataset(mesh_fp, "r")
     
-    if uppercase(ds.attrib["is_periodic"]) != "YES"
-        error("Support for non-periodic meshes is not yet implemented")
-    end
-    
+    nCells = mesh.PrimaryCells.nCells
+    # Pre-allocate zero indexed offsetarrays 
+    maxLevelCell = padded_index_array(nCells; backend=backend)
+
     nVertLevels = ds.dim["nVertLevels"]
-    minLevelCell = ds["minLevelCell"][:]
-    maxLevelCell = ds["maxLevelCell"][:]
+    # ....
+    maxLevelCell[1:end] = ds["maxLevelCell"][:]
     restingThickness = ds["restingThickness"][:,:,1]
     
     # check that the vertical mesh is stacked 
-    if !all(maxLevelCell .== nVertLevels)
+    if !all(maxLevelCell[1:end] .== nVertLevels)
         @error """ (Vertical Mesh Initializaton)\n
                Vertical Mesh is not stacked. Must implement vertical masking
                before this mesh can be used
@@ -65,15 +102,12 @@ function VerticalMesh(mesh_fp, mesh; backend=KA.CPU())
     end
 
     
-    ActiveLevelsEdge = ActiveLevels{Edge}(mesh; backend=backend,
-                                          nVertLevels=nVertLevels)
-    ActiveLevelsVertex = ActiveLevels{Vertex}(mesh; backend=backend, 
-                                              nVertLevels=nVertLevels)
+    ActiveLevelsEdge = ActiveLevels{Edge}(maxLevelCell, mesh; backend=backend)
+    ActiveLevelsVertex = ActiveLevels{Vertex}(maxLevelCell, mesh; backend=backend)
 
     restingThicknessSum = sum(restingThickness; dims=1)
 
     VerticalMesh(nVertLevels,
-                 Adapt.adapt(backend, minLevelCell),
                  Adapt.adapt(backend, maxLevelCell),
                  ActiveLevelsEdge,
                  ActiveLevelsVertex, 
@@ -93,22 +127,17 @@ function VerticalMesh(mesh; nVertLevels=1, backend=KA.CPU())
 
     nCells = mesh.PrimaryCells.nCells
 
-    minLevelCell = KA.ones(backend, Int32, nCells)
     maxLevelCell = KA.ones(backend, Int32, nCells) .* Int32(nVertLevels)
     # unit thickness water column, irrespective of how many vertical levels
     restingThickness    = KA.ones(backend, Float64, nCells)
     restingThicknessSum = KA.ones(backend, Float64, nCells) # MIGHT NEED TO CHANGE THIS
 
-    ActiveLevelsEdge = ActiveLevels{Edge}(mesh; backend=backend,
-                                          nVertLevels=nVertLevels)
-
-    ActiveLevelsVertex = ActiveLevels{Vertex}(mesh; backend=backend, 
-                                              nVertLevels=nVertLevels)
+    ActiveLevelsEdge = ActiveLevels{Edge}(maxLevelCell, mesh; backend=backend)
+    ActiveLevelsVertex = ActiveLevels{Vertex}(maxLevelCell, mesh; backend=backend)
 
     # All array have been allocated on the requested backend,
     # so no need to call methods from Adapt
     VerticalMesh(nVertLevels,
-                 minLevelCell,
                  maxLevelCell,
                  ActiveLevelsEdge,
                  ActiveLevelsVertex, 
@@ -123,7 +152,6 @@ end
 
 function Adapt.adapt_structure(backend, x::VerticalMesh)
     return VerticalMesh(x.nVertLevels,
-                        Adapt.adapt(backend, x.minLevelCell), 
                         Adapt.adapt(backend, x.maxLevelCell),
                         Adapt.adapt(backend, x.maxLevelEdge),
                         Adapt.adapt(backend, x.maxLevelVertex),

@@ -20,7 +20,7 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
 
     @unpack maxLevelEdge = VertMesh 
-    @unpack nEdges, nEdgesOnEdge = Edges
+    @unpack nEdges, nEdgesOnEdge, edgeMask = Edges
     @unpack weightsOnEdge, fᵉ, cellsOnEdge, edgesOnEdge = Edges
 
     # get the current timelevel of normalVelocity
@@ -39,6 +39,7 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
             edgesOnEdge,
             maxLevelEdge.Top, 
             weightsOnEdge, 
+            edgeMask,
             ndrange = nEdges)
     # sync the backend 
     KA.synchronize(backend)
@@ -53,7 +54,8 @@ end
                                                  @Const(nEdgesOnEdge),
                                                  @Const(edgesOnEdge),
                                                  @Const(maxLevelEdgeTop),
-                                                 @Const(weightsOnEdge))
+                                                 @Const(weightsOnEdge), 
+                                                 @Const(edgeMask))
     
     # global indices over nEdges
     iEdge = @index(Global, Linear)
@@ -62,14 +64,14 @@ end
         
         #if boundaryEdge[iEdge] != 0 continue end 
 
-        @inbounds eoe = edgesOnEdge[i,iEdge]
+        @inbounds eoe = edgesOnEdge[i, iEdge]
         
         if eoe == 0 continue end 
 
         @inbounds for k in 1:maxLevelEdgeTop[iEdge]
-            tendency[k,iEdge] += weightsOnEdge[i,iEdge] *
-                                 normalVelocity[k, eoe] *
-                                 fᵉ[eoe]
+            @inbounds tendency[k, iEdge] += weightsOnEdge[i, iEdge] *
+                                            normalVelocity[k, eoe] *
+                                            fᵉ[eoe] * edgeMask[k, iEdge]
         end
     end
 end 

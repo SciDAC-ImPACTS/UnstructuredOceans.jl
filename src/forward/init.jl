@@ -47,11 +47,10 @@ function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
     mesh_fp = ConfigGet(meshConfig, "filename_template")
     # read the inut mesh from the configuartion file 
     # NOTE: This might be a restart file based on config options 
-    
-    h_mesh = ReadHorzMesh(mesh_fp; backend=backend)
-    v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
-
-    return Mesh(h_mesh, v_mesh)
+    # ---------------------------------------------------
+    # TODO: read `nVertLevels` from the config file
+    # ---------------------------------------------------
+    return Mesh(mesh_fp; nVertLevels=1, backend=backend)
 end 
 
 function ocn_setup_clock(Config::GlobalConfig)

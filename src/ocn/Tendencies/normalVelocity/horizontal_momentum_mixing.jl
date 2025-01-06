@@ -20,7 +20,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
 
     @unpack maxLevelEdge = VertMesh 
     @unpack nEdges, dcEdge, dvEdge = Edges
-    @unpack cellsOnEdge, verticesOnEdge = Edges
+    @unpack cellsOnEdge, verticesOnEdge, edgeMask = Edges
 
     # unpack the normal velocity tendency term
     @unpack tendNormalVelocity = Tend 
@@ -40,7 +40,8 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             dcEdge,
             dvEdge,
             viscDel2, # WHERE IS THIS COMING FROM?
-            macLevelEdge.Top,
+            maxLevelEdge.Top,
+            edgeMask,
             ndrange=nEdges)
 
     # sync the backend 
@@ -58,8 +59,8 @@ end
                                                   @Const(dcEdge), 
                                                   @Const(dvEdge), 
                                                   @Const(viscDel2),
-                                                  @Const(maxLevelEdgeTop)) 
-
+                                                  @Const(maxLevelEdgeTop), 
+                                                  @Const(edgeMask))
     # global indices over nEdges
     iEdge = @index(Global, Linear)
     
@@ -75,6 +76,6 @@ end
         @inbounds tendency[k, iEdge] += (
             (div[k, iCell2] - div[k, iCell1]) * dcEdgeInv -
             (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv) *
-            viscDel2 # * edgemask
+            viscDel2 * edgeMask[k, iEdge]
     end
 end
