@@ -9,7 +9,9 @@ using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, ForcingVars, Mesh, Glo
 #const KA = KernelAbstractions
 
 # include tendecy methods
+include("velocity_forcing.jl")
 include("pressure_gradient.jl")
+include("horizontal_momentum_mixing.jl")
 include("horizontal_advection_and_coriolis.jl")
 
 ### TO DO: 
@@ -38,19 +40,24 @@ function computeNormalVelocityTendency!(Tend::TendencyVars,
     pGradType = sshGradient
 
     # compute pressure gradient tendency on requested backend
-    pressure_gradient_tendency!(
-        Tend, Prog, Diag, Mesh, pGradType; backend = backend
-       )
-    
-    
-    # hard coded type for now, see above about inquiring into the config struct
-    coriolisType = linearCoriolis
-    
-    # compute horizontal advection and corilois tendency on requested backend
-    horizontal_advection_and_coriolis_tendency!(
-        Tend, Prog, Diag, Mesh, coriolisType; backend = backend
-       )
-    
+    #pressure_gradient_tendency!(
+    #    Tend, Prog, Diag, Mesh, pGradType; backend = backend
+    #   )
+    #
+    #
+    ## hard coded type for now, see above about inquiring into the config struct
+    #coriolisType = linearCoriolis
+    #
+    ## compute horizontal advection and corilois tendency on requested backend
+    #horizontal_advection_and_coriolis_tendency!(
+    #    Tend, Prog, Diag, Mesh, coriolisType; backend = backend
+    #   )
+    #
+    ## compute horizontal momentum mixing
+    #horizontal_momentum_mixing_tendency!(
+    #    Tend, Prog, Diag, Mesh, Del2; backend = backend
+    #)
+
     # add forcing 
     velocity_forcing_tendency!(
         Tend, Prog, Diag, Mesh, Forcing; backend = backend

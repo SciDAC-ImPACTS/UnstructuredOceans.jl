@@ -56,12 +56,12 @@ function Mesh(mesh_ds::NCDataset; nVertLevels=nothing, backend=KA.CPU())
         VertMesh = VerticalMesh(HorzMesh; nVertLevels=nVertLevels)
     end
     
+    # With both a horizontal and vertical mesh, now initalize the boundary mask
+    HorzMesh = setBoundaryMask(HorzMesh, VertMesh)
     # Create the full Mesh strucutre on the CPU
     MPASMesh = Mesh(HorzMesh, VertMesh)
-    # With the full mesh strucutre, now initalize the boundary mask
-    setBoundaryMask!(MPASMesh.HorzMesh.Edges, MPASMesh.VertMesh)
-    # Adapt the full mesh strcuture to the requested backend
-    Adapt.adapt_structure(backend, MPASMesh)
+    
+    return MPASMesh
 end
 
 function Adapt.adapt_structure(backend, x::Mesh)

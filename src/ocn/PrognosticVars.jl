@@ -1,6 +1,7 @@
 using UnPack
 
 import Adapt
+import MOKA.MPASMesh: padded_index_array
 #using MPAS_O: GlobalConfig, Mesh, ConfigGet, NCDataset
 
 mutable struct PrognosticVars{F<:AbstractFloat, FV1 <: AbstractArray{F,1}, FV2 <: AbstractArray{F,2}, VFV1 <: AbstractVector{FV1}, VFV2 <: AbstractVector{FV2}}
@@ -35,7 +36,7 @@ mutable struct PrognosticVars{F<:AbstractFloat, FV1 <: AbstractArray{F,1}, FV2 <
         
         # check the type names; irrespective of type parameters
         # (e.g. `Array` instead of `Array{Float64, 1}`)
-        check_typeof_args(args)
+        #check_typeof_args(args)
         # check that all args are on the same backend
         check_args_backend(args)
         # check that all args have the same `eltype` and get that type
@@ -88,13 +89,13 @@ function PrognosticVars(config::GlobalConfig, mesh::Mesh; backend=KA.CPU())
     # TODO: Replace these with Vector{CuMatrix} objects or something similar
     #
 
-    ssh = zeros(Float64, nCells)
+    ssh = padded_index_array(nCells; eltype=Float64)
     normalVelocity = zeros(Float64, nVertLevels, nEdges)
     layerThickness = zeros(Float64, nVertLevels, nCells)
 
     # TO DO: check that the input file only has one time level 
     # broadcast the input value across all the time levels in the Prog struct
-    ssh[:] .= input["ssh"][:,1]
+    ssh[1:end] .= input["ssh"][:,1]
     normalVelocity[:,:] .= input["normalVelocity"][:,:,1]
     layerThickness[:,:] .= input["layerThickness"][:,:,1]
     

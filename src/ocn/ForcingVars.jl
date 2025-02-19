@@ -44,13 +44,13 @@ function ForcingVars(config::GlobalConfig, mesh::Mesh; backend=KA.CPU())
     # calculate the bulk forcing form the forcing file
     sfcStress = surface_bulk_forcing_vel(forcing_filename, mesh)
 
-    Adapat.adapt(backend, ForcingVars(sfcStress))
+    Adapt.adapt(backend, ForcingVars(sfcStress))
 end
 
 # For empty forcing just return the empty forcing structr
 Adapt.adapt_structure(to, x::ForcingVars{OA}) where OA <: Nothing = x
 
-Adapt.adapt_structure(to, x::ForcingVars) = Adapt.adapt(to, x.sfcStress)
+Adapt.adapt_structure(to, x::ForcingVars) = ForcingVars(Adapt.adapt(to, x.surfaceStress))
 
 function surface_bulk_forcing_vel(forcing_fn::String, mesh::Mesh)
    # unpack the mesh arrays needed to compute bulk forcing

@@ -86,11 +86,14 @@ function DiagnosticVars(config::GlobalConfig, Mesh::Mesh; backend=KA.CPU())
     # need to be done, such that only diagnostic variables required by 
     # the `Config` or requested by the `streams` will be activated. 
     
+    FT = Float64
+
     # create zero vectors to store diagnostic variables, on desired backend
-    thicknessFlux = KA.zeros(backend, Float64, nVertLevels, nEdges) 
-    velocityDivCell = KA.zeros(backend, Float64, nVertLevels, nCells)
-    relativeVorticity = KA.zeros(backend, Float64, nVertLevels, nVertices)
-    layerThicknessEdge = KA.zeros(backend, Float64, nVertLevels, nEdges) 
+    thicknessFlux = KA.zeros(backend, FT, nVertLevels, nEdges) 
+    velocityDivCell = KA.zeros(backend, FT, nVertLevels, nCells)
+    relativeVorticity = KA.zeros(backend, FT, nVertLevels, nVertices)
+    # initialize to Inf to avoid divide by zero and NaN problems 
+    layerThicknessEdge = KA.ones(backend, FT, nVertLevels, nEdges) * -typemax(FT)
 
     DiagnosticVars(layerThicknessEdge,
                    thicknessFlux,
@@ -143,14 +146,19 @@ function calculate_thicknessFlux!(Diag::DiagnosticVars,
                                   Mesh::Mesh;
                                   backend = CUDABackend())
 
+    @unpack nEdges, edgeMask = Mesh.HorzMesh.Edges
+
     normalVelocity = Prog.normalVelocity[end]
-    @unpack thicknessFlux, layerThicknessEdge = Diag 
+    @unpack thicknessFlux, layerThicknessEdge = Diag
 
     nthreads = 100
     kernel!  = compute_thicknessFlux!(backend, nthreads)
 
-    kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, size(normalVelocity)[2], ndrange=size(normalVelocity)[2])
-    #kernel!(thicknessFlux, Prog.normalVelocity, layerThicknessEdge, ndrange=(size(Prog.normalVelocity)[1],size(Prog.normalVelocity)[2]))
+    kernel!(thicknessFlux,
+            Prog.normalVelocity[end],
+            layerThicknessEdge,
+            edgeMask,
+            nEdges, ndrange=nEdges)
 
     @pack! Diag = thicknessFlux
 end
@@ -158,11 +166,14 @@ end
 @kernel function compute_thicknessFlux!(thicknessFlux,
                                         @Const(normalVelocity),
                                         @Const(layerThicknessEdge),
+                                        @Const(edgeMask),
                                         arrayLength)
 
     j = @index(Global, Linear)
     if j < arrayLength + 1
-        @inbounds thicknessFlux[1,j] = normalVelocity[1,j] * layerThicknessEdge[1,j]
+        @inbounds thicknessFlux[1,j] = normalVelocity[1,j] *
+                                       layerThicknessEdge[1,j] *
+                                       edgeMask[1, j]
     end
 
     #k, j = @index(Global, NTuple)

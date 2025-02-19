@@ -62,7 +62,7 @@ end
   
     for k in 1:maxLevelEdgeTop[iEdge]
         # gradient on edges calculation 
-        tendency[k, iEdge] -= 9.80616 * edgeMask[k, iEdge] * \
+        tendency[k, iEdge] -= 9.80616 * edgeMask[k, iEdge] *
                               (ssh[jCell2] - ssh[jCell1]) * InvDcEdge
     end
 end
