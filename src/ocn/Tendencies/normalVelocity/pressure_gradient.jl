@@ -54,9 +54,12 @@ end
     iEdge = @index(Global, Linear)
 
     # cell connectivity information for iEdge
-    @inbounds jCell1 = cellsOnEdge[1,iEdge]      
-    @inbounds jCell2 = cellsOnEdge[2,iEdge]
+    @inbounds jCell1 = cellsOnEdge[1, iEdge]      
+    @inbounds jCell2 = cellsOnEdge[2, iEdge]
     
+    # padded iCell array would probably be better
+    #if jCell2 > 0 break end
+
     # inverse edge spacing for iEdge
     @inbounds InvDcEdge = 1. / dcEdge[iEdge]
   

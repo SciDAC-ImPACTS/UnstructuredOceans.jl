@@ -25,8 +25,8 @@ function ocn_run(config_fp)
     #
 
     println("Setting the backend...")
-    #backend = KA.CPU()
-    backend = CUDABackend()
+    backend = KA.CPU()
+    #backend = CUDABackend()
     @show backend
 
     # Initialize the Model

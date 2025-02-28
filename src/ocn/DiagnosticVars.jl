@@ -131,15 +131,62 @@ function calculate_layerThicknessEdge!(Diag::DiagnosticVars,
                                        Mesh::Mesh;
                                        backend = KA.CPU())
     
-    #layerThickness = Prog.layerThickness[:,:,end]
+    @unpack HorzMesh, VertMesh = Mesh    
+    @unpack PrimaryCells, DualCells, Edges = HorzMesh
+
+    @unpack nEdges, cellsOnEdge = Edges
+    @unpack nVertLevels, maxLevelEdge = VertMesh 
+
+    # get the current timelevel of layerThickness
+    layerThickness = Prog.layerThickness[end]
+    # unpack the layer thickness edge diagnostic term
     @unpack layerThicknessEdge = Diag 
     
-    interpolateCell2Edge!(layerThicknessEdge, 
-                          Prog.layerThickness[end],
-                          Mesh; backend = backend)
+    nthreads = 100
+    kernel! = compute_layerThicknessEdge!(backend, nthreads)
+    # use kernel to compute diagnostic field
+    kernel!(layerThicknessEdge, 
+            layerThickness,
+            cellsOnEdge,
+            maxLevelEdge.Top,
+            nEdges, nVertLevels,
+            ndrange = nEdges)
 
+    # sync the backend 
+    KA.synchronize(backend)
+    
+    # pack the diagnostic field back into the struct for further computation
     @pack! Diag = layerThicknessEdge
 end 
+
+@kernel function compute_layerThicknessEdge!(layerThicknessEdge,
+                                             @Const(layerThickness),
+                                             @Const(cellsOnEdge),
+                                             @Const(maxLevelEdgeTop),
+                                             @Const(nEdges),
+                                             @Const(nVertLevels))
+
+    iEdge = @index(Global, Linear)
+
+    if iEdge < nEdges + 1
+        
+        # initialize to avoid divide by zero and NaN problems
+        @inbounds for k in 1:nVertLevels
+            @inbounds layerThicknessEdge[k, iEdge] = -1.0e34
+        end
+
+        @inbounds for k in 1:maxLevelEdgeTop[iEdge]
+
+            @inbounds @private iCell1 = cellsOnEdge[1,iEdge]
+            @inbounds @private iCell2 = cellsOnEdge[2,iEdge]
+
+            @inbounds layerThicknessEdge[k, iEdge] = 0.5 *
+                (layerThickness[k, iCell1] + layerThickness[k, iCell2])
+        end
+    end
+
+    @synchronize()
+end
 
 function calculate_thicknessFlux!(Diag::DiagnosticVars,
                                   Prog::PrognosticVars,
@@ -183,8 +230,8 @@ end
     @synchronize()
 end
 
-function calculate_velocityDivCell!(Diag::DiagnosticVars, 
-                                    Prog::PrognosticVars, 
+function calculate_velocityDivCell!(Diag::DiagnosticVars,
+                                    Prog::PrognosticVars,
                                     Mesh::Mesh;
                                     backend = KA.CPU()) 
     
@@ -203,16 +250,72 @@ function calculate_velocityDivCell!(Diag::DiagnosticVars,
     @pack! Diag = velocityDivCell
 end
 
+@kernel function compute_relativeVorticity!(relativeVorticity,
+                                            @Const(normalVelocity),
+                                            @Const(edgesOnVertex),
+                                            @Const(dcEdge), 
+                                            @Const(edgeSignOnVertex),
+                                            @Const(areaTriangle), 
+                                            @Const(vertexDegree),
+                                            @Const(maxLevelVertexBot))
+
+    # global indicies over nVertices
+    iVertex = @index(Global, Linear)
+
+    #@inbounds @private 
+    invAreaTriangle = 1.0 / areaTriangle[iVertex]
+
+    for j in 1:vertexDegree
+        #@inbounds 
+        iEdge = edgesOnVertex[j, iVertex]
+        
+        # padded iEdge array would probably be better
+        if iEdge > 0 break end
+
+        for k in 1:maxLevelVertexBot[iVertex]
+            # TODO: Add support for free-slip and partial slip
+            relativeVorticity[k, iVertex] += dcEdge[iEdge] *
+                                             invAreaTriangle *
+                                             normalVelocity[k, iEdge] *
+                                             edgeSignOnVertex[j, iVertex]
+        end
+    end
+end
+
 function calculate_relativeVorticity!(Diag::DiagnosticVars, 
                                       Prog::PrognosticVars, 
                                       Mesh::Mesh;
                                       backend = KA.CPU()) 
 
-    #normalVelocity = Prog.normalVelocity[:,:,end]
+    @unpack HorzMesh, VertMesh = Mesh    
+    @unpack DualCells, Edges = HorzMesh
 
+    @unpack nEdges, dcEdge = Edges
+    @unpack maxLevelVertex = VertMesh 
+    @unpack nVertices, vertexDegree = DualCells
+    @unpack areaTriangle, edgeSignOnVertex, edgesOnVertex = DualCells
+
+    # get the current timelevel of normalVelocity
+    normalVelocity = Prog.normalVelocity[end]
+    # unpack the relativeVorticity diagnostic term
     @unpack relativeVorticity = Diag
 
-    CurlOnVertex!(relativeVorticity, Prog.normalVelocity[end], Mesh; backend=backend)
+    #nthreads = 50
+    kernel!  = compute_relativeVorticity!(backend)#, nthreads)
+    # use kernel to compute diagnostic field
+    kernel!(relativeVorticity,
+            normalVelocity,
+            edgesOnVertex,
+            dcEdge,
+            edgeSignOnVertex, 
+            areaTriangle,
+            vertexDegree,
+            maxLevelVertex.Bot,
+            ndrange=nVertices)
 
+    # sync the backend 
+    KA.synchronize(backend)
+
+    # pack the diagnostic field back into the struct for further computation
     @pack! Diag = relativeVorticity
 end
