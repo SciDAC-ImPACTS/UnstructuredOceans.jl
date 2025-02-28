@@ -14,12 +14,10 @@ mesh_fn = DownloadMesh(PlanarTest)
 #backend = KA.CPU()
 backend = CUDABackend();
 
-# Read in the purely horizontal doubly periodic testing mesh
-HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
-# Create a dummy vertical mesh from the horizontal mesh
-VertMesh = VerticalMesh(HorzMesh; nVertLevels=10, backend=backend)
 # Create a the full Mesh strucutre 
-MPASMesh = Mesh(HorzMesh, VertMesh)
+MPASMesh = Mesh(mesh_fn; nVertLevels=10, backend=backend)
+# Unpack the horizontal and vertcial mesh structs
+@unpack HorzMesh, VertMesh = MPASMesh
 
 # get some dimension information
 nEdges = HorzMesh.Edges.nEdges

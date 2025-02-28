@@ -20,17 +20,18 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
 
     @unpack maxLevelEdge = VertMesh 
     @unpack nEdges, dcEdge, dvEdge = Edges
-    @unpack cellsOnEdge, verticesOnEdge = Edges
+    @unpack cellsOnEdge, verticesOnEdge, edgeMask = Edges
 
     # unpack the normal velocity tendency term
     @unpack tendNormalVelocity = Tend 
     # get needed fields from diagnostics structure
     @unpack velocityDivCell, relativeVorticity = Diag
 
-    viscDel2 = 1.0
+    viscDel2 = 400.0
 
     # initialize the kernel
-    kernel! = SSHGradOnEdge!(backend)
+    nthreads = 50
+    kernel! = horizontalm_momentum_mixing_del2!(backend, nthreads)
     # use kernel to compute horizontal momentum mixing
     kernel!(tendNormalVelocity,
             velocityDivCell, 
@@ -40,7 +41,8 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             dcEdge,
             dvEdge,
             viscDel2, # WHERE IS THIS COMING FROM?
-            macLevelEdge.Top,
+            maxLevelEdge.Top,
+            edgeMask,
             ndrange=nEdges)
 
     # sync the backend 
@@ -50,16 +52,16 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
     @pack! Tend = tendNormalVelocity 
 end
 
-@kernel function horizontalm_momentum_mixing_del2(tendency, 
-                                                  @Const(div),
-                                                  @Const(relVort),
-                                                  @Const(cellsOnEdge),
-                                                  @Const(verticesOnEdge), 
-                                                  @Const(dcEdge), 
-                                                  @Const(dvEdge), 
-                                                  @Const(viscDel2),
-                                                  @Const(maxLevelEdgeTop)) 
-
+@kernel function horizontalm_momentum_mixing_del2!(tendency, 
+                                                   @Const(div),
+                                                   @Const(relVort),
+                                                   @Const(cellsOnEdge),
+                                                   @Const(verticesOnEdge), 
+                                                   @Const(dcEdge), 
+                                                   @Const(dvEdge), 
+                                                   @Const(viscDel2),
+                                                   @Const(maxLevelEdgeTop), 
+                                                   @Const(edgeMask))
     # global indices over nEdges
     iEdge = @index(Global, Linear)
     
@@ -68,13 +70,13 @@ end
     @inbounds @private iVertex1 = verticesOnEdge[1, iEdge]
     @inbounds @private iVertex2 = verticesOnEdge[2, iEdge]
 
-    @inbounds @private dcEdgeInv = 1.0 / dcEdgeInv[iEdge] 
-    @inbounds @private dvEdgeInv = 1.0 / dvEdgeInv[iEdge] 
+    @inbounds @private dcEdgeInv = 1.0 / dcEdge[iEdge] 
+    @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge] 
 
     for k in 1:maxLevelEdgeTop[iEdge]
         @inbounds tendency[k, iEdge] += (
             (div[k, iCell2] - div[k, iCell1]) * dcEdgeInv -
             (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv) *
-            viscDel2 # * edgemask
+            viscDel2 * edgeMask[k, iEdge]
     end
 end

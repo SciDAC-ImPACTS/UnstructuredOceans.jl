@@ -103,7 +103,7 @@ function write_netcdf(Setup::ModelSetup,
 
     #@show typeof(Prog.ssh[end]), typeof(d_Prog.ssh[end])
 
-    ssh[:,:] = Prog.ssh[end]
+    ssh[:,:] = Prog.ssh[end][1:end]
     layerThickness[:,:,:] = Prog.layerThickness[end] 
     normalVelocity[:,:,:] = Prog.normalVelocity[end]
 
@@ -207,7 +207,7 @@ function write_netcdf(Setup::ModelSetup,
     #verticesOnCell[:,:] = mesh.HorzMesh.PrimaryCells.VoC
     #verticesOnEdge[:,:] = mesh.HorzMesh.Edges.VoE
 
-    ssh[:] = Prog.ssh[end]
+    ssh[:] = Prog.ssh[end][1:end]
     layerThickness[:,:] = Prog.layerThickness[end]
     normalVelocity[:,:] = Prog.normalVelocity[end]
 

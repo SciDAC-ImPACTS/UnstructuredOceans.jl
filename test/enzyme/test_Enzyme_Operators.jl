@@ -21,12 +21,11 @@ let
 backends = [KA.CPU(), CUDABackend()]
 for backend in backends
     @show backend
-    # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
-    # Create a dummy vertical mesh from the horizontal mesh
-    VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
+
     # Create a the full Mesh strucutre 
-    MPASMesh = Mesh(HorzMesh, VertMesh)
+    MPASMesh = Mesh(mesh_fn; nVertLevels=1, backend=backend)
+    # Unpack the horizontal and vertcial mesh structs
+    @unpack HorzMesh, VertMesh = MPASMesh
 
     setup = TestSetup(MPASMesh, PlanarTest; backend=backend)
 
@@ -63,12 +62,10 @@ for backend in backends
                         Const(backend))
     @allowscalar dnorm_dscalar_rev = d_Scalar[kBegin]
 
-    # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
-    # Create a dummy vertical mesh from the horizontal mesh
-    VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
     # Create a the full Mesh strucutre 
-    MPASMesh = Mesh(HorzMesh, VertMesh)
+    MPASMesh = Mesh(mesh_fn; nVertLevels=1, backend=backend)
+    # Unpack the horizontal and vertcial mesh structs
+    @unpack HorzMesh, VertMesh = MPASMesh
 
     setup = TestSetup(MPASMesh, PlanarTest; backend=backend)
     fill!(d_gradNum, 0.0)
@@ -95,10 +92,8 @@ for backend in backends
     end
 
     @allowscalar dnorm_dscalar_fwd = d_gradNum[kEnd]
-
-
-    HorzMeshFD = ReadHorzMesh(mesh_fn; backend=backend)
-    MPASMeshFD = Mesh(HorzMeshFD, VertMesh)
+    MPASMeshFD = Mesh(mesh_fn; nVertLevels=1, backend=backend)
+    HorzMeshFD = MPASMeshFD.HorzMesh
     ϵ = 1e-8
 
     # For comparison, let's compute the derivative by hand for a given scalar entry:
@@ -160,12 +155,10 @@ for backend in backends
                         Duplicated(deepcopy(MPASMesh), d_MPASMesh),
                         Const(backend))
     @allowscalar dnorm_dvecedge_rev    = d_VecEdge[kBegin]
-    # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
-    # Create a dummy vertical mesh from the horizontal mesh
-    VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
     # Create a the full Mesh strucutre 
-    MPASMesh = Mesh(HorzMesh, VertMesh)
+    MPASMesh = Mesh(mesh_fn; nVertLevels=1, backend=backend)
+    # Unpack the horizontal and vertcial mesh structs
+    @unpack HorzMesh, VertMesh = MPASMesh
 
     setup = TestSetup(MPASMesh, PlanarTest; backend=backend)
     fill!(d_divNum, 0.0)
@@ -191,8 +184,8 @@ for backend in backends
     @test fwd_mode
 
     @allowscalar dnorm_dvecedge_fwd = d_divNum[kEnd]
-    HorzMeshFD = ReadHorzMesh(mesh_fn; backend=backend)
-    MPASMeshFD = Mesh(HorzMeshFD, VertMesh)
+    MPASMeshFD = Mesh(mesh_fn; nVertLevels=1, backend=backend)
+    HorzMeshFD = MPASMeshFD.HorzMesh
     ϵ = 1e-8
     # For comparison, let's compute the derivative by hand for a given VecEdge entry:
     VecEdgeP = 𝐅ₑ(setup, PlanarTest)

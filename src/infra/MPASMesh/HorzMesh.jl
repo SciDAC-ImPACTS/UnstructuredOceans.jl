@@ -1,14 +1,5 @@
-using CUDA
-using UnPack
-using Accessors
-using NCDatasets
-using StructArrays
-
-import Adapt
-import KernelAbstractions as KA
-
 ###
-### Types 
+### Types
 ###
 
 """
@@ -33,7 +24,7 @@ A type describing the location edge points where velocity is defined
 struct Edge end
 
 
-### 
+###
 ### Horizontal mesh struct
 ###
 
@@ -51,7 +42,7 @@ end
 """
 """
 function Adapt.adapt_structure(backend, x::HorzMesh)
-    return HorzMesh(Adapt.adapt(backend, x.PrimaryCells), 
+    return HorzMesh(Adapt.adapt(backend, x.PrimaryCells),
                     Adapt.adapt(backend, x.DualCells),
                     Adapt.adapt(backend, x.Edges))
 end
@@ -61,13 +52,13 @@ end
 ###
 
 # these are line segments
-@kwdef struct Edges{I, FV, IV, FM, IM} 
+@kwdef struct Edges{I, FV, IV, FM, IM}
     # I   --> (I)nt
-    # FT  --> (F)loat (V)ector 
-    # IT  --> (I)int  (V)ector 
-    # FM  --> (F)loat (M)atrix  
-    # IM  --> (I)int  (M)atrix  
-    
+    # FT  --> (F)loat (V)ector
+    # IT  --> (I)int  (V)ector
+    # FM  --> (F)loat (M)atrix
+    # IM  --> (I)int  (M)atrix
+
     # dimension info
     nEdges::I
 
@@ -75,9 +66,9 @@ end
     xᵉ::FV   # X coordinates of edge midpoints in cartesian space
     yᵉ::FV   # Y coordinates of edge midpoints in cartesian space
     zᵉ::FV   # Z coordinates of edge midpoints in cartesian space
-   
+
     # coriolis parameter
-    fᵉ::FV 
+    fᵉ::FV
 
     nEdgesOnEdge::IV # (n)umber of (E)dges (o) (E)dge
 
@@ -89,22 +80,28 @@ end
     edgesOnEdge::IM   # (E)dges   (o)n (E)dge
     weightsOnEdge::FM # (W)eights (o)n (E)dge; reconstruction weights associated w/ EoE
 
-    dvEdge::FV
-    dcEdge::FV 
+    # area of edge
     angleEdge::FV
+
+    # mask to determine if computation should be done on edge
+    edgeMask::IM
+
+    # spacgin metrics
+    dvEdge::FV
+    dcEdge::FV
 end
 
 ###
-### Elements of mesh 
+### Elements of mesh
 ###
 
 # (P)rimary mesh cell
-@kwdef struct PrimaryCells{I, FV, IV, IM} 
+@kwdef struct PrimaryCells{I, FV, IV, IM}
     # I   --> (I)nt
-    # FV  --> (F)loat (V)ector 
-    # IV  --> (I)int  (V)ector 
-    # IM  --> (I)int  (M)atrix  
-    
+    # FV  --> (F)loat (V)ector
+    # IV  --> (I)int  (V)ector
+    # IM  --> (I)int  (M)atrix
+
     # dimension info
     nCells::I
     maxEdges::I
@@ -113,11 +110,11 @@ end
     xᶜ::FV   # X coordinates of cell centers in cartesian space
     yᶜ::FV   # Y coordinates of cell centers in cartesian space
     zᶜ::FV   # Z coordinates of cell centers in cartesina space
-    
-    # coriolis parameter
-    fᶜ::FV 
 
-    nEdgesOnCell::IV # (n)umber of (E)dges (o)n (C)ell 
+    # coriolis parameter
+    fᶜ::FV
+
+    nEdgesOnCell::IV # (n)umber of (E)dges (o)n (C)ell
 
     # intra cell connectivity
     edgesOnCell::IM    # (E)dges    (o)n (C)ell; set of edges that define the boundary $P_i$
@@ -125,19 +122,19 @@ end
 
     # inter cell connectivity
     cellsOnCell::IM    # (C)ells    (o)n (C)ell
-    edgeSignOnCell::IM # (E)dge (S)ign (o)n (C)ell; 
+    edgeSignOnCell::IM # (E)dge (S)ign (o)n (C)ell
 
-    # area of cell 
+    # area of cell
     areaCell::FV
 end
 
 # (D)ual mesh cell
 @kwdef struct DualCells{I, FV, IM}
     # I   --> (I)nt
-    # FV  --> (F)loat (V)ector 
-    # IV  --> (I)int  (V)ector 
-    # IM  --> (I)int  (M)atrix  
-    
+    # FV  --> (F)loat (V)ector
+    # IV  --> (I)int  (V)ector
+    # IM  --> (I)int  (M)atrix
+
     # dimension info
     nVertices::I
     vertexDegree::I
@@ -146,41 +143,41 @@ end
     xᵛ::FV   # X coordinate of vertices in cartesian space
     yᵛ::FV   # Y coordinate of vertices in cartesian space
     zᵛ::FV   # Z coordinate of vertices in cartesina space
-    
-    # coriolis parameter
-    fᵛ::FV 
 
-    # intra vertex connecivity 
+    # coriolis parameter
+    fᵛ::FV
+
+    # intra vertex connecivity
     edgesOnVertex::IM # (E)dges (o)n (V)ertex; set of edges that define the boundary $D_i$
-    cellsOnVertex::IM # (C)ells (o)n (V)ertex 
-    
+    cellsOnVertex::IM # (C)ells (o)n (V)ertex
+
     # inter vertex connecivity
     edgeSignOnVertex::IM #(E)dge (S)ign (o)n Vertex
 
-    # area of triangle 
+    # area of triangle
     areaTriangle::FV
-end 
+end
 
 stack(arr, N) = [Tuple(arr[:,i]) for i in 1:N]
 
-function readPrimaryMesh(ds)
-    
-    # get dimension info 
-    nCells  = ds.dim["nCells"] 
+function readPrimaryMesh(ds::NCDataset)
+
+    # get dimension info
+    nCells  = ds.dim["nCells"]
     maxEdges = ds.dim["maxEdges"]
 
-    # coordinate data 
+    # coordinate data
     xᶜ = ds["xCell"][:]
     yᶜ = ds["yCell"][:]
     zᶜ = ds["zCell"][:]
-    
+
     if haskey(ds, "fCell")
         fᶜ = ds["fCell"][:]
     else
         ## initalize coriolis as zero b/c not included in the base mesh
         fᶜ = zeros(eltype(xᶜ), nCells)
     end
-    
+
     # intra connectivity
     edgesOnCell = ds["edgesOnCell"][:,:]
     verticesOnCell = ds["verticesOnCell"][:,:]
@@ -196,7 +193,7 @@ function readPrimaryMesh(ds)
     areaCell = ds["areaCell"][:]
 
     PrimaryCells(nCells = nCells, maxEdges = maxEdges,
-                 xᶜ = xᶜ, yᶜ = yᶜ, zᶜ = zᶜ, fᶜ = fᶜ, 
+                 xᶜ = xᶜ, yᶜ = yᶜ, zᶜ = zᶜ, fᶜ = fᶜ,
                  areaCell = areaCell,
                  edgesOnCell = edgesOnCell,
                  verticesOnCell = verticesOnCell,
@@ -205,18 +202,18 @@ function readPrimaryMesh(ds)
                  edgeSignOnCell = edgeSignOnCell)
 end
 
-function readDualMesh(ds)
+function readDualMesh(ds::NCDataset)
 
-    # get dimension info 
-    nVertices = ds.dim["nVertices"] 
+    # get dimension info
+    nVertices = ds.dim["nVertices"]
     maxEdges  = ds.dim["maxEdges"]
     vertexDegree = ds.dim["vertexDegree"]
 
-    # coordinate data 
+    # coordinate data
     xᵛ = ds["xVertex"][:]
     yᵛ = ds["yVertex"][:]
     zᵛ = ds["zVertex"][:]
-    
+
     if haskey(ds, "fVertex")
         fᵛ = ds["fVertex"][:]
     else
@@ -227,7 +224,7 @@ function readDualMesh(ds)
     # intra connectivity
     edgesOnVertex = ds["edgesOnVertex"][:,:]
     cellsOnVertex = ds["cellsOnVertex"][:,:]
-    
+
     # get the integer type from the NetCDF file
     int_type = eltype(ds["edgesOnVertex"])
     # edge sign on vertex, empty for now will be popupated later
@@ -240,16 +237,16 @@ function readDualMesh(ds)
               xᵛ = xᵛ, yᵛ = yᵛ, zᵛ = zᵛ, fᵛ = fᵛ,
               edgesOnVertex = edgesOnVertex,
               cellsOnVertex = cellsOnVertex,
-              edgeSignOnVertex = edgeSignOnVertex, 
+              edgeSignOnVertex = edgeSignOnVertex,
               areaTriangle = areaTriangle)
-end 
+end
 
-function readEdgeInfo(ds)
+function readEdgeInfo(ds::NCDataset)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
 
-    # coordinate data 
+    # coordinate data
     xᵉ = ds["xEdge"][:]
     yᵉ = ds["yEdge"][:]
     zᵉ = ds["zEdge"][:]
@@ -263,7 +260,6 @@ function readEdgeInfo(ds)
 
     nEdgesOnEdge = ds["nEdgesOnEdge"][:]
 
-   
     # intra connectivity
     cellsOnEdge = ds["cellsOnEdge"][:,:]
     verticesOnEdge = ds["verticesOnEdge"][:,:]
@@ -272,11 +268,16 @@ function readEdgeInfo(ds)
     edgesOnEdge = ds["edgesOnEdge"][:,:]
     weightsOnEdge = ds["weightsOnEdge"][:,:]
 
+    angleEdge = ds["angleEdge"][:]
+
+    # edgeMask is created with one vertical layer, irrespecitve of how many
+    # vertical layers are in the mesh. A properly shaped edgeMask will be
+    # created by `setBoundaryMask!`, after the vertical mesh is initialized
+    edgeMask = zeros(Int32, (1, nEdges))
+
     dvEdge = ds["dvEdge"][:]
     dcEdge = ds["dcEdge"][:]
 
-    angleEdge = ds["angleEdge"][:]
-        
     Edges(nEdges = nEdges,
           xᵉ = xᵉ, yᵉ = yᵉ, zᵉ = zᵉ, fᵉ = fᵉ,
           nEdgesOnEdge = nEdgesOnEdge,
@@ -284,73 +285,92 @@ function readEdgeInfo(ds)
           verticesOnEdge = verticesOnEdge,
           edgesOnEdge = edgesOnEdge,
           weightsOnEdge = weightsOnEdge,
+          angleEdge = angleEdge,
+          edgeMask = edgeMask,
           dvEdge = dvEdge,
-          dcEdge = dcEdge, 
-          angleEdge = angleEdge)
+          dcEdge = dcEdge)
 end
 
 function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
-    
+
     @unpack cellsOnEdge = edges
     @unpack nCells, edgeSignOnCell, nEdgesOnCell, edgesOnCell = primaryCells
 
     @inbounds for iCell in 1:nCells, i in 1:nEdgesOnCell[iCell]
-         
+
         iEdge = edgesOnCell[i, iCell]
-        
+
         # vector points from cell 1 to cell 2
         if iCell == cellsOnEdge[1, iEdge]
             edgeSignOnCell[i, iCell] = -1
-        else 
+        else
             edgeSignOnCell[i, iCell] = 1
-        end 
-    end    
-    
+        end
+    end
+
     # PrimaryCell struct is immutable so need to use Accessor package,
     @reset primaryCells.edgeSignOnCell = edgeSignOnCell
-end 
+end
 
 function signIndexField!(dualMesh::DualCells, edges::Edges)
-    
+
     @unpack verticesOnEdge = edges
-    @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh 
+    @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh
 
     for iVertex in 1:nVertices, i in 1:vertexDegree
-         
+
         @inbounds iEdge = edgesOnVertex[i, iVertex]
-        
+
+        # if edge missing from vertex (i.e. vertex is on a culled boundary),
+        # then leave edgeSignOnVertex as undefined (i.e. zero)
+        if iEdge == 0 continue end
+
         # vector points from cell 1 to cell 2
         if iVertex == verticesOnEdge[1, iEdge]
             @inbounds edgeSignOnVertex[i, iVertex] = -1
-        else 
+        else
             @inbounds edgeSignOnVertex[i, iVertex] = 1
-        end 
-    end    
-    
+        end
+    end
+
     # DualCell struct is immutable so need to use Accessor package,
     @reset dualMesh.edgeSignOnVertex = edgeSignOnVertex
-end 
+end
 
-function ReadHorzMesh(meshPath::String; backend=KA.CPU())
-    
-    ds = NCDataset(meshPath, "r", format=:netcdf4)
+function setBoundaryMask(HorzMesh, VertMesh)
 
-    PrimaryMesh = readPrimaryMesh(ds)
-    DualMesh    = readDualMesh(ds)
-    edges       = readEdgeInfo(ds)
-    
+    nEdges = HorzMesh.Edges.nEdges
+    nVertLevels = VertMesh.nVertLevels
+    @unpack Bot, Top = VertMesh.maxLevelEdge
+
+    # allocate a new edgeMask array, now with the proper numbe of vert levels
+    edgeMask = zeros(Int32, (nVertLevels, nEdges))
+    for iEdge in 1:nEdges, k in Bot[iEdge]:Top[iEdge]
+        edgeMask[k, iEdge] = 1
+    end
+
+    # Edges struct is immutable so need to use Accessor package,
+    @reset HorzMesh.Edges.edgeMask = edgeMask
+
+    # For some reason we cannot manipulate this in place, and must
+    # retrun in order to register the updated nested attributes
+    return HorzMesh
+end
+
+function ReadHorzMesh(meshDataset::NCDataset; backend=KA.CPU())
+
+    PrimaryMesh = readPrimaryMesh(meshDataset)
+    DualMesh    = readDualMesh(meshDataset)
+    edges       = readEdgeInfo(meshDataset)
+
     # set the edge sign on cells (primary mesh)
     signIndexField!(PrimaryMesh, edges)
     # set the edge sign on vertices (dual mesh)
     signIndexField!(DualMesh, edges)
-    
+
     mesh = HorzMesh(PrimaryMesh, DualMesh, edges)
-    
+
     # move the horizontal mesh struct to requested backend
-    # NOTE: this does not happen earlier (i.e. in constructors of PrimaryCells,
-    #       DualCells, Edges) b/c of the uninitialized fields in the mesh 
-    #       strucutres which are populated above. It's more efficent to have
-    #       those calculations happen on CPU (I think)
     Adapt.adapt_structure(backend, mesh)
 end
 
@@ -365,9 +385,10 @@ function Adapt.adapt_structure(to, edges::Edges)
                  verticesOnEdge = Adapt.adapt(to, edges.verticesOnEdge),
                  edgesOnEdge = Adapt.adapt(to, edges.edgesOnEdge),
                  weightsOnEdge = Adapt.adapt(to, edges.weightsOnEdge),
+                 angleEdge = Adapt.adapt(to, edges.angleEdge),
+                 edgeMask = Adapt.adapt(to, edges.edgeMask),
                  dvEdge = Adapt.adapt(to, edges.dvEdge),
-                 dcEdge = Adapt.adapt(to, edges.dcEdge), 
-                 angleEdge = Adapt.adapt(to, edges.angleEdge))
+                 dcEdge = Adapt.adapt(to, edges.dcEdge))
 end
 
 function Adapt.adapt_structure(to, cells::PrimaryCells)

@@ -136,8 +136,7 @@ end
 
     @inbounds @private invAreaTriangle = 1.0 / areaTriangle[iVertex]
 
-    for j in 1:vertexDegree
-        @inbounds @private iEdge = edgesOnVertex[j, iVertex]
+    for j in 1:vertexDegree @inbounds @private iEdge = edgesOnVertex[j, iVertex]
 
         @inbounds CurlVertex[k, iVertex] += dcEdge[iEdge] *
                                             invAreaTriangle *
