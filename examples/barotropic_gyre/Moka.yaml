@@ -1,10 +1,51 @@
-Moka:
-  TimeManagement:
-    StartTime: 0001-01-01_00:00:00
-    StopTime: 0005-01-01_00:00:00
-    RunDuration: none
-  TimeIntegration:
-    TimeStepper: Forward-Backward
-    TimeStep: 0000_00:20:00
-  State:
-    NTimeLevels: 2
+omega:
+  time_management:
+    config_start_time: 0001-01-01_00:00:00
+    config_stop_time: 0001-01-01_03:00:00
+    config_run_duration: none
+    config_calendar_type: noleap
+    config_do_restart: false
+  time_integration:
+    config_dt: 0000_00:00:30
+    config_time_integrator: Forward-Euler
+    config_number_of_time_levels: 2
+  hmix_del2:
+    config_use_mom_del2: true
+    config_mom_del2: 400
+  streams:
+    mesh:
+      type: input
+      filename_template: init.nc
+      input_interval: initial_only
+    input:
+      type: input
+      filename_template: init.nc
+      input_interval: initial_only
+    output:
+      type: output
+      filename_template: output.nc
+      filename_interval: 01-00-00_00:00:00
+      reference_time: 0001-01-01_00:00:00
+      clobber_mode: truncate
+      precision: double
+      output_interval: 0000_00:01:00
+      contents:
+      - xtime
+      - normalVelocity
+      - layerThickness
+      - ssh
+      - layerThicknessEdge
+      - layerThicknessVertex
+      - velocityDivCell
+      - relativeVorticityVertex
+      - norm_rel_vort_vertex
+      - norm_rel_vort_edge
+      - norm_planet_vort_vertex
+      - norm_planet_vort_edge
+    forcing:
+      type: input
+      filename_template: forcing.nc
+      input_interval: initial_only
+      contents:
+      - windStressZonal
+      - windStressMeridional
