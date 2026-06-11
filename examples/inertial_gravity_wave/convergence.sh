@@ -21,7 +21,7 @@ execut="${gitdir}/${driver}"
 #module load julia/1.10.4
 
 for dir in 200km 100km 50km 25km; do
-    python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --outdir $dir
+    python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
 
     mkdir $dir
     cd $dir
@@ -34,7 +34,7 @@ for dir in 200km 100km 50km 25km; do
 
     end=$(date +%s.%N)
     
-    runtime=$(awk -v start=$start -v end=$end 'BEGIN {print end - start}')
+    runtime=$(echo "$end - $start" | bc)
 
     echo "${dir} ran in ${runtime} secs"
 

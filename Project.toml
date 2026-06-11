@@ -1,7 +1,7 @@
 name = "MOKA"
 uuid = "4c5738b9-ea62-4abc-b436-bc5c16744d63"
-authors = ["SciDAC Team"]
 version = "0.1.0"
+authors = ["SciDAC Team"]
 
 [deps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
@@ -12,6 +12,8 @@ CFTime = "179af706-886a-5703-950a-314cd64e0468"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
 GR = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
 KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -29,5 +31,6 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [extensions]
 MPASEnzymeExt = "Enzyme"
 
-[weakdeps]
-Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+[compat]
+Enzyme = "0.13.157"
+FiniteDifferences = "0.12.34"
