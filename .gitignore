@@ -25,3 +25,9 @@ sbatch_logs/
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+
+# NetCDF output files
+*.nc
+
+# Custom
+_research/
