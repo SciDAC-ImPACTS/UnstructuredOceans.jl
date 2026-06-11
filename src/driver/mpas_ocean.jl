@@ -1,3 +1,4 @@
+# %%
 using Dates
 using CUDA
 using MOKA
@@ -17,7 +18,7 @@ const KA=KernelAbstractions
 #config_fp = "/global/homes/a/anolan/MPAS-Ocean.jl/bare_minimum.yml"
 config_fp = "./config.yml"
 
-function ocn_run(config_fp)
+function ocn_run(config_fp, backend = KA.CPU())
 
     #
     # Setup for model
@@ -25,7 +26,7 @@ function ocn_run(config_fp)
     
     println("Setting the backend...")
     #backend = KA.CPU()
-    backend = CUDABackend()
+    # backend = CUDABackend()
     @show backend
     
     # Initialize the Model  
