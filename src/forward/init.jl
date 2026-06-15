@@ -22,9 +22,8 @@ function ocn_init(Config_filepath; backend=KA.CPU())
     # Diagnostic and Tendecies probabl don't need to be initialized here 
     # instead should happen within the `ocn_run` method, prior to entering 
     # the first time integration loop to ensure values are initialized 
-    Diag = DiagnosticVars(Config, Mesh; backend=backend)
-
-    Tend = TendencyVars(Config, Mesh; backend=backend)
+    Diag = DiagnosticVars(Mesh; backend=backend)
+    Tend = TendencyVars(Mesh; backend=backend)
 
     return Setup, Diag, Tend, Prog
 end 
