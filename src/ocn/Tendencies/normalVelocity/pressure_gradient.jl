@@ -7,59 +7,55 @@ const KA=KernelAbstractions
 # define the supported PressureGradient types to dispatch on. 
 abstract type sshGradient <: PresssureGradient end 
 
-function pressure_gradient_tendency!(Tend::TendencyVars, 
+function pressure_gradient_tendency!(Tend::TendencyVars,
                                      Prog::PrognosticVars,
-                                     Diag::DiagnosticVars, 
-                                     Mesh::Mesh, 
+                                     Diag::DiagnosticVars,
+                                     Mesh::Mesh,
                                      ::Type{sshGradient};
                                      backend = KA.CPU())
 
-    @unpack HorzMesh, VertMesh = Mesh    
+    @unpack HorzMesh, VertMesh = Mesh
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
 
-    @unpack maxLevelEdge = VertMesh 
-    @unpack nEdges, dcEdge, cellsOnEdge = Edges
-   
-    # get the current timelevel of ssh 
-    ssh = Prog.ssh[end] #[:,end]
-    # unpack the normal velocity tendency term
-    @unpack tendNormalVelocity = Tend 
-    
-    # initialize the kernel
+    @unpack maxLevelEdge = VertMesh
+    @unpack nEdges, dcEdge, cellsOnEdge, boundaryEdge = Edges
+
+    ssh = Prog.ssh[end]
+    @unpack tendNormalVelocity = Tend
+
     nthreads = 50
     kernel! = SSHGradOnEdge!(backend, nthreads)
-    # use kernel to compute gradient
     kernel!(tendNormalVelocity,
             ssh,
             cellsOnEdge,
             dcEdge,
+            boundaryEdge,
             maxLevelEdge.Top,
             ndrange=nEdges)
-    # sync the backend 
     KA.synchronize(backend)
-    
-    # pack the tendecy pack into the struct for further computation
-    @pack! Tend = tendNormalVelocity 
+
+    @pack! Tend = tendNormalVelocity
 end
 
 @kernel function SSHGradOnEdge!(tendency,
                                 ssh,
                                 cellsOnEdge,
                                 dcEdge,
+                                boundaryEdge,
                                 maxLevelEdgeTop)
 
-    # global indices over nEdges
     iEdge = @index(Global, Linear)
 
-    # cell connectivity information for iEdge
-    @inbounds jCell1 = cellsOnEdge[1,iEdge]      
+    if boundaryEdge[iEdge] == 1
+        return
+    end
+
+    @inbounds jCell1 = cellsOnEdge[1,iEdge]
     @inbounds jCell2 = cellsOnEdge[2,iEdge]
-    
-    # inverse edge spacing for iEdge
-    @inbounds InvDcEdge = 1. / dcEdge[iEdge]
-  
+
+    @inbounds InvDcEdge = 1.0 / dcEdge[iEdge]
+
     for k in 1:maxLevelEdgeTop[iEdge]
-        # gradient on edges calculation 
         tendency[k, iEdge] -= 9.80616 * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
     end
 end

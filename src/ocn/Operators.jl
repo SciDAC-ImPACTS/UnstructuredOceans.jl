@@ -82,14 +82,15 @@ end
 @kernel function GradientOnEdge(GradEdge,
                                 ScalarCell,
                                 cellsOnEdge,
-                                dcEdge)
-    # global indices over nEdges
+                                dcEdge,
+                                boundaryEdge)
     iEdge, k = @index(Global, NTuple)
 
-    # TODO: add conditional statement to check for masking if needed
+    if boundaryEdge[iEdge] == 1
+        return
+    end
 
-    # cell connectivity information for iEdge
-    @inbounds @private jCell1 = cellsOnEdge[1,iEdge]      
+    @inbounds @private jCell1 = cellsOnEdge[1,iEdge]
     @inbounds @private jCell2 = cellsOnEdge[2,iEdge]
 
     @inbounds GradEdge[k, iEdge] = (ScalarCell[k, jCell2] - ScalarCell[k, jCell1]) / dcEdge[iEdge]
@@ -98,19 +99,20 @@ end
 end
 
 function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; backend=KA.CPU(), workgroupsize=64)
-   
-    @unpack HorzMesh, VertMesh = Mesh    
+
+    @unpack HorzMesh, VertMesh = Mesh
 
     @unpack Edges = HorzMesh
-    @unpack nVertLevels = VertMesh 
-    @unpack nEdges, dcEdge, cellsOnEdge = Edges
-    
+    @unpack nVertLevels = VertMesh
+    @unpack nEdges, dcEdge, cellsOnEdge, boundaryEdge = Edges
+
     kernel! = GradientOnEdge(backend)
 
-    kernel!(grad, 
-            hᵢ, 
+    kernel!(grad,
+            hᵢ,
             cellsOnEdge,
             dcEdge,
+            boundaryEdge,
             workgroupsize=workgroupsize,
             ndrange=(nEdges, nVertLevels))
 
@@ -176,12 +178,12 @@ end
 
 function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh;
                                backend = KA.CPU())
-    
-    @unpack HorzMesh, VertMesh = Mesh    
+
+    @unpack HorzMesh, VertMesh = Mesh
     @unpack Edges = HorzMesh
 
-    @unpack nVertLevels = VertMesh 
-    @unpack nEdges, cellsOnEdge = Edges
+    @unpack nVertLevels = VertMesh
+    @unpack nEdges, cellsOnEdge, boundaryEdge = Edges
 
     nthreads = 50
     kernel!  = interpolateCell2Edge(backend, nthreads)
@@ -189,9 +191,9 @@ function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh;
     kernel!(edgeValue,
             cellValue,
             cellsOnEdge,
+            boundaryEdge,
             nEdges,
             ndrange=nEdges)
-            #ndrange=(nEdges, nVertLevels))
 
     KA.synchronize(backend)
 end
@@ -199,21 +201,20 @@ end
 @kernel function interpolateCell2Edge(edgeValue,
                                       cellValue,
                                       cellsOnEdge,
+                                      boundaryEdge,
                                       arrayLength)
-    # global indices over nEdges
-    #iEdge, k = @index(Global, NTuple)
     iEdge = @index(Global, Linear)
     k = 1
 
-    # TODO: add conditional statement to check for masking if needed
-
-    # cell connectivity information for iEdge
     if iEdge < arrayLength + 1
-        @inbounds @private iCell1 = cellsOnEdge[1,iEdge]      
+        if boundaryEdge[iEdge] == 1
+            return
+        end
+        @inbounds @private iCell1 = cellsOnEdge[1,iEdge]
         @inbounds @private iCell2 = cellsOnEdge[2,iEdge]
 
         @inbounds edgeValue[k, iEdge] = 0.5 * (cellValue[k, iCell1] +
-                                            cellValue[k, iCell2])
+                                                cellValue[k, iCell2])
     end
 
     @synchronize()

@@ -41,14 +41,20 @@ end
 
 
 function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
-    # get mesh section of the streams file
     meshConfig = ConfigGet(Config.streams, "mesh")
-    # get mesh filepath from streams section
     mesh_fp = ConfigGet(meshConfig, "filename_template")
-    # read the inut mesh from the configuartion file 
-    # NOTE: This might be a restart file based on config options 
-    
-    h_mesh = ReadHorzMesh(mesh_fp; backend=backend)
+
+    # read del2 momentum viscosity; default 0 (no mixing) if section absent
+    momentumDel2 = 0.0
+    if haskey(Config.namelist.dict, "hmix_del2")
+        hmixConfig = ConfigGet(Config.namelist, "hmix_del2")
+        if haskey(hmixConfig.dict, "config_mom_del2")
+            momentumDel2 = Float64(ConfigGet(hmixConfig, "config_mom_del2"))
+        end
+    end
+
+    h_mesh = ReadHorzMesh(mesh_fp; backend=backend,
+                          momentumDel2=momentumDel2, rho=1000.0)
     v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
 
     return Mesh(h_mesh, v_mesh)
