@@ -17,7 +17,7 @@ from polaris.ocean.vertical import init_vertical_coord
 # Polaris `barotropic_gyre` task, `barotropic_gyre_munk_no-slip` section:
 # https://docs.e3sm.org/polaris/main/users_guide/ocean/tasks/barotropic_gyre.html
 # The no-slip variant is used here because Moka.jl imposes solid (no-slip) walls.
-F_0   = 1.0e-4    # Coriolis parameter at southern boundary [s⁻¹]
+F_0   = 1.0e-3    # Coriolis parameter at southern boundary [s⁻¹]
 BETA  = 1.0e-10   # meridional gradient of Coriolis parameter [s⁻¹ m⁻¹]
 TAU_0 = 0.1       # peak zonal wind stress [N m⁻²]
 NU_2  = 400.0     # horizontal (Laplacian) viscosity [m² s⁻¹]
