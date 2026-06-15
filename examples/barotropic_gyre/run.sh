@@ -8,7 +8,7 @@
 #SBATCH -t 02:00:00
 
 # replace this path with the path to the git repo
-gitdir="${HOME}/.julia/dev/Moka.jl"
+gitdir="${HOME}/.julia/dev/MOKA.jl"
 driver="src/driver/mpas_ocean.jl"
 execut="${gitdir}/${driver}"
 
