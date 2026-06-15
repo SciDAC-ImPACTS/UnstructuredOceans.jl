@@ -127,10 +127,8 @@ end
 
     # global indicies over nVertices and vertexDegree
     iVertex, k = @index(Global, NTuple)
-    #iVertex = @index(Global, Linear)
-    #k = 1
-   
-    #CurlVertex[k, iVertex] = 0.0
+
+    CurlVertex[k, iVertex] = 0.0
 
     @inbounds @private invAreaTriangle = 1.0 / areaTriangle[iVertex]
 

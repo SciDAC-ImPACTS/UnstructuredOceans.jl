@@ -115,17 +115,8 @@ end
 
 # Helper function for setting the clock, simulationAlarm, and outputAlarm
 function ocn_init_alarms(Setup)
-    mesh = Setup.mesh
-    
-    # this is hardcoded for now, but should really be set accordingly in the 
-    # yaml file
-    #dt = floor(3.0 * mean(mesh.dcEdge) / 1e3)
-    dcEdge = mesh.HorzMesh.Edges.dcEdge
-    dt = floor(2 * (mean(dcEdge) / 1e3) * mean(dcEdge) / 200e3) 
-    changeTimeStep!(Setup.timeManager, Second(dt))
-    
     clock = Setup.timeManager
-    
+
     simulationAlarm = clock.alarms["simulation_end"]
     outputAlarm = clock.alarms["outputAlarm"]
 

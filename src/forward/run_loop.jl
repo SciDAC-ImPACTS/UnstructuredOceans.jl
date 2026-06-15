@@ -40,7 +40,7 @@ end
 
 # Helper function that runs the model "loop" without instantiating new memory or performing I/O.
 # This is what we call AD on. At the end we also sum up the squared SSH for testing purposes.
-function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, ForwardEuler, clock, simulationAlarm, outputAlarm;
+function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simulationAlarm, outputAlarm;
                       backend=CPU(), print_interval=500)
     Mesh = Setup.mesh
 
@@ -59,7 +59,11 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, ForwardEuler, clock, si
 
     while !isRinging(simulationAlarm)
         advance!(clock)
-        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, ForwardEuler; backend=backend)
+        if integrator === RungeKutta4
+            ocn_timestep(Prog, Diag, Tend, Setup, RungeKutta4; backend=backend)
+        else
+            ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator; backend=backend)
+        end
         step += 1
 
         if step % print_interval == 0
@@ -93,10 +97,10 @@ end
 # sumCPU is intentionally absent: copyto!(cpu, gpu) lowers to cuMemcpyDtoHAsync_v2
 # which carries a gc-transition LLVM operand bundle that Enzyme's GradientUtils
 # does not support. The caller must pre-seed d_sumGPU and do the D2H copy outside autodiff.
-function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler, clock, simulationAlarm, outputAlarm; backend=CUDABackend())
+function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, integrator, clock, simulationAlarm, outputAlarm; backend=CUDABackend())
     while !isRinging(simulationAlarm)
         advance!(clock)
-        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, ForwardEuler; backend=backend)
+        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator; backend=backend)
         if isRinging(outputAlarm)
             reset!(outputAlarm)
         end
