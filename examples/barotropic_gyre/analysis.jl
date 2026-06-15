@@ -77,25 +77,45 @@ function barotropic_streamfunction(mesh_ds::NCDataset,
     rows = Int[]; cols = Int[]; vals = Float64[]
     b    = Float64[]
 
+    boundary_vertices = Set{Int}()
+
     for e in 1:nEdges
         v1 = verticesOnEdge[1, e]
         v2 = verticesOnEdge[2, e]
         c1 = cellsOnEdge[1, e]
         c2 = cellsOnEdge[2, e]
-        # skip boundary edges that touch a missing (0) vertex or cell
-        (v1 == 0 || v2 == 0 || c1 == 0 || c2 == 0) && continue
+        # A wall edge has a missing (0) cell on one side: no normal flow through
+        # it, so its vertices lie on the closed boundary streamline.  Record them
+        # (skipping any degenerate 0-vertex) and add no transport equation.
+        if v1 == 0 || v2 == 0 || c1 == 0 || c2 == 0
+            v1 != 0 && (c1 == 0 || c2 == 0) && push!(boundary_vertices, v1)
+            v2 != 0 && (c1 == 0 || c2 == 0) && push!(boundary_vertices, v2)
+            continue
+        end
 
         h_edge    = 0.5 * (layer_thickness[c1] + layer_thickness[c2])
         transport = h_edge * nv_surface[e] * dvEdge[e]
 
+        # MPAS orientation: normal n̂ (cell1→cell2) and tangent t̂ (vertex1→vertex2)
+        # satisfy n̂ × t̂ = +k̂.  With the transport convention (U,V) = k̂ × ∇ψ used
+        # by the exact Munk solution, the flux in the +n̂ direction equals
+        # ψ(v1) − ψ(v2), hence ψ(v2) − ψ(v1) = −transport.
         push!(rows, length(b) + 1); push!(cols, v2); push!(vals,  1.0)
         push!(rows, length(b) + 1); push!(cols, v1); push!(vals, -1.0)
-        push!(b, transport)
+        push!(b, -transport)
     end
 
-    # pin vertex 1 to zero to remove the constant null space
-    push!(rows, length(b) + 1); push!(cols, 1); push!(vals, 1.0)
-    push!(b, 0.0)
+    # The solid walls form a single closed streamline (no normal flow), so ψ is
+    # constant there; pin every boundary vertex to 0.  This both removes the
+    # constant null space and anchors the wall isoline, which is where the error
+    # otherwise concentrates.  Fall back to pinning vertex 1 if no wall was found.
+    if isempty(boundary_vertices)
+        push!(boundary_vertices, 1)
+    end
+    for v in boundary_vertices
+        push!(rows, length(b) + 1); push!(cols, v); push!(vals, 1.0)
+        push!(b, 0.0)
+    end
 
     A = sparse(rows, cols, vals, length(b), nVertices)
     psi = A \ b
@@ -165,7 +185,7 @@ function plot_comparison(results::Dict, res_num::String="")
     elim = maximum(abs.(results["psi_err"]))
     ax3 = Axis(fig[1, 5], title="Error (Numerical − Analytical)",
                xlabel="x (km)", aspect=1)
-    s3 = scatter!(ax3, x, y, color=results["psi_err"], colormap=:balance,
+    s3 = scatter!(ax3, x, y, color=results["psi_err"], colormap=:coolwarm,
                   colorrange=(-elim, elim), markersize=5)
     Colorbar(fig[1, 6], s3)
 
