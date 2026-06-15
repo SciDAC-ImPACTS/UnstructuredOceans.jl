@@ -38,7 +38,8 @@ function ocn_run(config_fp, backend = KA.CPU())
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
 
     ti_str     = MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"), "config_time_integrator")
-    integrator = ti_str == "RungeKutta4" ? RungeKutta4 : ForwardEuler
+    integrator = parse_integrator(ti_str)
+    println("Time integrator: $integrator")
     ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simulationAlarm, outputAlarm; backend=backend)
 
     #

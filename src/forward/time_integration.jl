@@ -1,8 +1,27 @@
-# define our parent abstract type 
-abstract type timeStepper end 
-# define the supported timeStepper types to dispatch on. 
-abstract type ForwardEuler <: timeStepper end 
+# define our parent abstract type
+abstract type timeStepper end
+# define the supported timeStepper types to dispatch on.
+abstract type ForwardEuler <: timeStepper end
 abstract type RungeKutta4  <: timeStepper end
+
+"""
+    parse_integrator(name) -> timeStepper type
+
+Map a `config_time_integrator` string to its timeStepper type, tolerating common
+spellings (e.g. "RK4" for RungeKutta4, "Forward-Euler" for ForwardEuler).
+"""
+function parse_integrator(name::AbstractString)
+    key = lowercase(replace(name, "-" => "", "_" => "", " " => ""))
+    if key in ("rungekutta4", "rk4")
+        return RungeKutta4
+    elseif key in ("forwardeuler", "euler", "fe")
+        return ForwardEuler
+    else
+        throw(ArgumentError(
+            "Unknown config_time_integrator \"$name\"; " *
+            "expected \"RungeKutta4\" (\"RK4\") or \"ForwardEuler\"."))
+    end
+end
 
 using CUDA: @allowscalar
 using KernelAbstractions

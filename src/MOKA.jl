@@ -1,7 +1,7 @@
 module MOKA
     
     export ocn_run_loop, ocn_init, ocn_init_shadows, ocn_init_alarms, isRinging, advance!, ocn_timestep, changeTimeStep!, reset!
-    export RungeKutta4, ForwardEuler
+    export RungeKutta4, ForwardEuler, parse_integrator
     export write_netcdf
     export Clock, OneTimeAlarm, PeriodicAlarm
 
