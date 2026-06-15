@@ -58,21 +58,19 @@ end
 
     iEdge = @index(Global, Linear)
 
-    if boundaryEdge[iEdge] == 1
-        return
-    end
+    if boundaryEdge[iEdge] != 1
+        @inbounds @private iCell1   = cellsOnEdge[1, iEdge]
+        @inbounds @private iCell2   = cellsOnEdge[2, iEdge]
+        @inbounds @private iVertex1 = verticesOnEdge[1, iEdge]
+        @inbounds @private iVertex2 = verticesOnEdge[2, iEdge]
 
-    @inbounds @private iCell1   = cellsOnEdge[1, iEdge]
-    @inbounds @private iCell2   = cellsOnEdge[2, iEdge]
-    @inbounds @private iVertex1 = verticesOnEdge[1, iEdge]
-    @inbounds @private iVertex2 = verticesOnEdge[2, iEdge]
+        @inbounds @private dcEdgeInv = 1.0 / dcEdge[iEdge]
+        @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge]
 
-    @inbounds @private dcEdgeInv = 1.0 / dcEdge[iEdge]
-    @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge]
-
-    for k in 1:maxLevelEdgeTop[iEdge]
-        @inbounds tendency[k, iEdge] += viscDel2 * (
-            (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
-            (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
+        for k in 1:maxLevelEdgeTop[iEdge]
+            @inbounds tendency[k, iEdge] += viscDel2 * (
+                (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
+                (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
+        end
     end
 end

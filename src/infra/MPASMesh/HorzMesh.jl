@@ -346,15 +346,16 @@ function signIndexField!(dualMesh::DualCells, edges::Edges)
     @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh 
 
     for iVertex in 1:nVertices, i in 1:vertexDegree
-         
+
         @inbounds iEdge = edgesOnVertex[i, iVertex]
-        
+        iEdge == 0 && continue
+
         # vector points from cell 1 to cell 2
         if iVertex == verticesOnEdge[1, iEdge]
             @inbounds edgeSignOnVertex[i, iVertex] = -1
-        else 
+        else
             @inbounds edgeSignOnVertex[i, iVertex] = 1
-        end 
+        end
     end    
     
     # DualCell struct is immutable so need to use Accessor package,

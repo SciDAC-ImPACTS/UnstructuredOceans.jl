@@ -29,9 +29,7 @@ end
 
     iEdge = @index(Global, Linear)
 
-    if boundaryEdge[iEdge] == 1
-        return
+    if boundaryEdge[iEdge] != 1
+        @inbounds tendency[1, iEdge] += windForcingEdge[iEdge] / layerThicknessEdge[1, iEdge]
     end
-
-    @inbounds tendency[1, iEdge] += windForcingEdge[iEdge] / layerThicknessEdge[1, iEdge]
 end

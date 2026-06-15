@@ -112,9 +112,11 @@ def create_initial_state(resolution_km, output_dir):
     # layerThickness = (ssh + H) broadcast over nVertLevels
     layer_thickness = ds['ssh'] + H
     layer_thickness, _ = xr.broadcast(layer_thickness, ds.refBottomDepth)
-    ds['layerThickness'] = layer_thickness.transpose(
-        'nCells', 'nVertLevels'
-    ).expand_dims(dim='Time', axis=0)
+    ordered = [d for d in ['Time', 'nCells', 'nVertLevels'] if d in layer_thickness.dims]
+    layer_thickness = layer_thickness.transpose(*ordered)
+    if 'Time' not in layer_thickness.dims:
+        layer_thickness = layer_thickness.expand_dims(dim='Time', axis=0)
+    ds['layerThickness'] = layer_thickness
 
     # Normal velocity initial condition: at rest
     norm_vel = xr.zeros_like(ds_mesh.xEdge)

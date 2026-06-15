@@ -46,16 +46,14 @@ end
 
     iEdge = @index(Global, Linear)
 
-    if boundaryEdge[iEdge] == 1
-        return
-    end
+    if boundaryEdge[iEdge] != 1
+        @inbounds jCell1 = cellsOnEdge[1,iEdge]
+        @inbounds jCell2 = cellsOnEdge[2,iEdge]
 
-    @inbounds jCell1 = cellsOnEdge[1,iEdge]
-    @inbounds jCell2 = cellsOnEdge[2,iEdge]
+        @inbounds InvDcEdge = 1.0 / dcEdge[iEdge]
 
-    @inbounds InvDcEdge = 1.0 / dcEdge[iEdge]
-
-    for k in 1:maxLevelEdgeTop[iEdge]
-        tendency[k, iEdge] -= 9.80616 * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
+        for k in 1:maxLevelEdgeTop[iEdge]
+            tendency[k, iEdge] -= 9.80616 * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
+        end
     end
 end

@@ -86,14 +86,12 @@ end
                                 boundaryEdge)
     iEdge, k = @index(Global, NTuple)
 
-    if boundaryEdge[iEdge] == 1
-        return
+    if boundaryEdge[iEdge] != 1
+        @inbounds @private jCell1 = cellsOnEdge[1,iEdge]
+        @inbounds @private jCell2 = cellsOnEdge[2,iEdge]
+
+        @inbounds GradEdge[k, iEdge] = (ScalarCell[k, jCell2] - ScalarCell[k, jCell1]) / dcEdge[iEdge]
     end
-
-    @inbounds @private jCell1 = cellsOnEdge[1,iEdge]
-    @inbounds @private jCell2 = cellsOnEdge[2,iEdge]
-
-    @inbounds GradEdge[k, iEdge] = (ScalarCell[k, jCell2] - ScalarCell[k, jCell1]) / dcEdge[iEdge]
 
     @synchronize()
 end
@@ -207,14 +205,13 @@ end
     k = 1
 
     if iEdge < arrayLength + 1
-        if boundaryEdge[iEdge] == 1
-            return
-        end
-        @inbounds @private iCell1 = cellsOnEdge[1,iEdge]
-        @inbounds @private iCell2 = cellsOnEdge[2,iEdge]
+        if boundaryEdge[iEdge] != 1
+            @inbounds @private iCell1 = cellsOnEdge[1,iEdge]
+            @inbounds @private iCell2 = cellsOnEdge[2,iEdge]
 
-        @inbounds edgeValue[k, iEdge] = 0.5 * (cellValue[k, iCell1] +
-                                                cellValue[k, iCell2])
+            @inbounds edgeValue[k, iEdge] = 0.5 * (cellValue[k, iCell1] +
+                                                    cellValue[k, iCell2])
+        end
     end
 
     @synchronize()
