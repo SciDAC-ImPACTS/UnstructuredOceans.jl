@@ -9,23 +9,21 @@ using KernelAbstractions
                                        n_{\rm e,i} F_{\rm e} l_{\rm e}
 ```
 """
-@kernel function DivergenceOnCell_P1(temp, @Const(VecEdge), @Const(dvEdge), nEdges)
+@kernel function DivergenceOnCell_P1(temp, VecEdge, dvEdge, nEdges)
 
     iEdge, k = @index(Global, NTuple)
-    #iEdge = @index(Global, Linear)
-    #k = 1
     if iEdge < nEdges + 1
         @inbounds temp[k,iEdge] = VecEdge[k,iEdge] * dvEdge[iEdge]
     end
     @synchronize()
 end
 
-@kernel function DivergenceOnCell_P2(DivCell, 
-                                     @Const(VecEdge),
-                                     @Const(nEdgesOnCell), 
-                                     @Const(edgesOnCell),
-                                     @Const(edgeSignOnCell),
-                                     @Const(areaCell)) #::Val{n}, where {n}
+@kernel function DivergenceOnCell_P2(DivCell,
+                                     VecEdge,
+                                     nEdgesOnCell,
+                                     edgesOnCell,
+                                     edgeSignOnCell,
+                                     areaCell) #::Val{n}, where {n}
 
     iCell, k = @index(Global, NTuple)
     #iCell = @index(Global, Linear)
@@ -82,9 +80,9 @@ end
     
 """
 @kernel function GradientOnEdge(GradEdge,
-                                @Const(ScalarCell),
-                                @Const(cellsOnEdge), 
-                                @Const(dcEdge))
+                                ScalarCell,
+                                cellsOnEdge,
+                                dcEdge)
     # global indices over nEdges
     iEdge, k = @index(Global, NTuple)
 
@@ -120,12 +118,12 @@ function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; backend=KA.CPU(), workgroupsize
 end
 
 @kernel function CurlOnVertex(CurlVertex,
-                              @Const(VecEdge),
-                              @Const(edgesOnVertex),
-                              @Const(dcEdge), 
-                              @Const(edgeSignOnVertex), 
-                              @Const(areaTriangle), 
-                              @Const(vertexDegree))
+                              VecEdge,
+                              edgesOnVertex,
+                              dcEdge,
+                              edgeSignOnVertex,
+                              areaTriangle,
+                              vertexDegree)
 
     # global indicies over nVertices and vertexDegree
     iVertex, k = @index(Global, NTuple)
@@ -198,9 +196,9 @@ function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh;
     KA.synchronize(backend)
 end
 
-@kernel function interpolateCell2Edge(edgeValue, 
-                                      @Const(cellValue), 
-                                      @Const(cellsOnEdge),
+@kernel function interpolateCell2Edge(edgeValue,
+                                      cellValue,
+                                      cellsOnEdge,
                                       arrayLength)
     # global indices over nEdges
     #iEdge, k = @index(Global, NTuple)

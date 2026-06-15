@@ -156,8 +156,8 @@ function calculate_thicknessFlux!(Diag::DiagnosticVars,
 end
 
 @kernel function compute_thicknessFlux!(thicknessFlux,
-                                        @Const(normalVelocity),
-                                        @Const(layerThicknessEdge),
+                                        normalVelocity,
+                                        layerThicknessEdge,
                                         arrayLength)
 
     j = @index(Global, Linear)

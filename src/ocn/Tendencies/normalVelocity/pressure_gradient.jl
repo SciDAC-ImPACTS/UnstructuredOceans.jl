@@ -43,10 +43,10 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
 end
 
 @kernel function SSHGradOnEdge!(tendency,
-                                @Const(ssh),
-                                @Const(cellsOnEdge), 
-                                @Const(dcEdge), 
-                                @Const(maxLevelEdgeTop))
+                                ssh,
+                                cellsOnEdge,
+                                dcEdge,
+                                maxLevelEdgeTop)
 
     # global indices over nEdges
     iEdge = @index(Global, Linear)

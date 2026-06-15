@@ -39,7 +39,7 @@ function advanceTimeLevels!(Prog::PrognosticVars; backend=CUDABackend())
     end 
 end
 
-@kernel function advance_2d_array(fieldPrev, @Const(fieldNext), arrayLength)
+@kernel function advance_2d_array(fieldPrev, fieldNext, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         @inbounds fieldPrev[j] = fieldNext[j]
@@ -47,10 +47,7 @@ end
     @synchronize()
 end
 
-@kernel function advance_3d_array(fieldPrev, @Const(fieldNext), arrayLength)
-    #i, j = @index(Global, NTuple)
-    #@inbounds fieldPrev[i, j] = fieldNext[i, j]
-
+@kernel function advance_3d_array(fieldPrev, fieldNext, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         @inbounds fieldPrev[1, j] = fieldNext[1, j]
@@ -148,32 +145,28 @@ function ocn_timestep(Prog::PrognosticVars,
 end 
 
 function ocn_timestep(timestep,
-                      Prog::PrognosticVars, 
+                      Prog::PrognosticVars,
                       Diag::DiagnosticVars,
-                      Tend::TendencyVars, 
-                      S::ModelSetup,
+                      Tend::TendencyVars,
+                      Mesh::Mesh,
                       ::Type{ForwardEuler};
                       backend = CUDABackend())
 
-    Mesh = S.mesh
-    Clock = S.timeManager
-    Config = S.config
-    
-    # advance the timelevels within the state strcut 
+    # advance the timelevels within the state strcut
     advanceTimeLevels!(Prog; backend=backend)
-    
-    # unpack the state variable arrays 
+
+    # unpack the state variable arrays
     @unpack ssh, normalVelocity, layerThickness = Prog
-    
+
     # compute the diagnostics
     diagnostic_compute!(Mesh, Diag, Prog; backend = backend)
 
-    # compute normalVelocity tenedency 
-    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh, Config;
+    # compute normalVelocity tenedency
+    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh;
                                    backend = backend)
-    
+
     # compute layerThickness tendency
-    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh, Config;
+    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh;
                                    backend = backend)
     
     # update the state variables by the tendencies
@@ -193,7 +186,7 @@ function ocn_timestep(timestep,
 end
 
 # Zeros out a vector along its entire length
-@kernel function UpdateStateVariable!(var, @Const(tendVar), @Const(dt), arrayLength)
+@kernel function UpdateStateVariable!(var, tendVar, dt, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         var[1,j] = var[1,j] + dt[1] * tendVar[1, j]
@@ -202,7 +195,7 @@ end
 end
 
 
-@kernel function Update_ssh!(ssh, @Const(layerThickness), @Const(restingThicknessSum), arrayLength)
+@kernel function Update_ssh!(ssh, layerThickness, restingThicknessSum, arrayLength)
 
     j = @index(Global, Linear)
     if j < arrayLength + 1
