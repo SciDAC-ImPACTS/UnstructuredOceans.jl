@@ -22,7 +22,7 @@ execut="${gitdir}/${driver}"
 # spin-up compared against an analytical streamfunction (see analysis.jl), not
 # a multi-resolution convergence study.  The loop is kept so additional
 # resolutions can be added trivially.
-for dir in 30km; do
+for dir in 10km; do
     python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
 
     cd $dir
