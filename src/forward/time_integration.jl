@@ -89,7 +89,7 @@ function ocn_timestep(Prog::PrognosticVars,
     ssh_kernel! = Update_ssh!(backend, nthreads)
     ssh_length  = length(ssh[end])
 
-    diagnostic_compute!(Mesh, Diag, Prog)
+    diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
 
     for RK_step in 1:4
         computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; backend=backend)
@@ -101,7 +101,7 @@ function ocn_timestep(Prog::PrognosticVars,
             normalVelocity[end] .= normalVelocityCurr .+ a[RK_step] .* tendNormalVelocity
             layerThickness[end] .= layerThicknessCurr .+ a[RK_step] .* tendLayerThickness
             ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
-            diagnostic_compute!(Mesh, Diag, Prog)
+            diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
         end
 
         normalVelocityNew .+= b[RK_step] .* tendNormalVelocity
@@ -114,7 +114,7 @@ function ocn_timestep(Prog::PrognosticVars,
 
     @pack! Prog = ssh, normalVelocity, layerThickness
 
-    diagnostic_compute!(Mesh, Diag, Prog)
+    diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
 end
 
 function ocn_timestep(timestep,
