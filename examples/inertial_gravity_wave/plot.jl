@@ -246,17 +246,16 @@ end
 
 # %% Animation of SSH fields
 """
-    animate_fields(ds_fp, mesh_fp, out_path; fps) -> out_path
+    animate_fields(ds_fp, mesh_fp, out_path, nT; fps) -> out_path
 
 Record a GIF showing numerical SSH, exact SSH, and SSH error for every
 checkpoint frame in `ds_fp`, evaluated against the IGW exact solution.
 """
-function animate_fields(ds_fp::String, mesh_fp::String, out_path::String; fps::Int=8)
+function animate_fields(ds_fp::String, mesh_fp::String, out_path::String, nT; fps::Int=8)
     num_ds  = NCDataset(ds_fp)
     mesh_ds = NCDataset(mesh_fp)
 
     exact = ExactSolution(mesh_ds)
-    nT    = length(num_ds.dim["time"])
     times = Array(num_ds["time"][1:nT])
 
     ssh_num_all = Array(num_ds["ssh"][:, 1:nT])   # (nCells, nT)
@@ -310,7 +309,7 @@ end
 # res_dirs = ["40km", "20km", "10km"]
 
 # for dir_ in reverse(res_dirs)
-res = "25km"
+res = "200km"
 dir_ = joinpath(@__DIR__, res)
 mesh_fp = joinpath(dir_, "initial_state.nc")
 out_fp = joinpath(dir_, "output.nc")
@@ -321,4 +320,5 @@ fig = plot_fields(results, exact, res)
 display(fig)
 
 # %% Plot time-series
-animate_fields(out_fp, mesh_fp, joinpath(dir_, "animation.gif"))
+nT = 100
+animate_fields(out_fp, mesh_fp, joinpath(dir_, "animation.mp4"), nT)

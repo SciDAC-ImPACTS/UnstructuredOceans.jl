@@ -67,7 +67,7 @@ function read_timeseries(out_fp::String, mesh_fp::String)
     mesh_ds = NCDataset(mesh_fp)
     num_ds  = NCDataset(out_fp)
 
-    nT = length(num_ds.dim["time"])
+    nT = num_ds.dim["time"]
 
     ts = Dict(
         "xCell" => Array(mesh_ds["xCell"][:]),
@@ -87,16 +87,16 @@ end
 
 # %% Animation of SSH and normal velocity
 """
-    animate_fields(ts, out_path; fps) -> out_path
+    animate_fields(ts, out_path, nT; fps) -> out_path
 
 Record a GIF of SSH and surface normal velocity for all checkpoints in `ts`.
 """
-function animate_fields(ts::Dict, out_path::String; fps::Int=8)
+function animate_fields(ts::Dict, out_path::String, nT; fps::Int=8)
     xc = ts["xCell"] ./ 1e3
     yc = ts["yCell"] ./ 1e3
     xe = ts["xEdge"] ./ 1e3
     ye = ts["yEdge"] ./ 1e3
-    nT = length(ts["time"])
+    # nT = length(ts["time"])
 
     ssh_lim = max(maximum(abs, ts["ssh"]), 1e-10)
     vel_lim = max(maximum(abs, ts["vel"]), 1e-10)
@@ -106,18 +106,20 @@ function animate_fields(ts::Dict, out_path::String; fps::Int=8)
     vel_obs   = @lift ts["vel"][:, $frame_i]
     title_obs = @lift @sprintf("t = %.1f days", ts["time"][$frame_i] / 86400.0)
 
-    fig = Figure(size=(900, 420))
+    fig = Figure(size=(800, 600))
 
     ax1 = Axis(fig[1, 1], title=title_obs,
                xlabel="x (km)", ylabel="y (km)", aspect=1)
     s1 = scatter!(ax1, xc, yc; color=ssh_obs, colormap=:balance,
-                  colorrange=(-ssh_lim, ssh_lim), markersize=5)
+                #   colorrange=(-ssh_lim, ssh_lim), 
+                  markersize=5)
     Colorbar(fig[1, 2], s1; label="SSH (m)")
 
-    ax2 = Axis(fig[1, 3], xlabel="x (km)", aspect=1)
+    ax2 = Axis(fig[2, 1], xlabel="x (km)", aspect=1)
     s2 = scatter!(ax2, xe, ye; color=vel_obs, colormap=:balance,
-                  colorrange=(-vel_lim, vel_lim), markersize=5)
-    Colorbar(fig[1, 4], s2; label="Normal velocity (m/s)")
+                #   colorrange=(-vel_lim, vel_lim), 
+                  markersize=5)
+    Colorbar(fig[2, 2], s2; label="Normal velocity (m/s)")
 
     record(fig, out_path, 1:nT; framerate=fps) do i
         frame_i[] = i
@@ -127,7 +129,7 @@ function animate_fields(ts::Dict, out_path::String; fps::Int=8)
 end
 
 # %% Main
-res     = "10km_rk4"
+res     = "10km"
 dir_    = joinpath(@__DIR__, res)
 mesh_fp = joinpath(dir_, "initial_state.nc")
 out_fp  = joinpath(dir_, "output.nc")
@@ -139,4 +141,5 @@ display(fig)
 
 # %% Animate time-series of SSH and normal velocity
 ts = read_timeseries(out_fp, mesh_fp)
-animate_fields(ts, joinpath(@__DIR__, "animation.mp4"))
+nT = 100
+animate_fields(ts, joinpath(@__DIR__, "animation.mp4"), nT)
