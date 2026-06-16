@@ -205,16 +205,10 @@ function DateTime_from_String(string::String)
     # No Y/M/D info in timestamp
     if all(mat.captures[1:3] .=== nothing)
         return Time(h, m, s)
-    # When: "D_hh::mm::ss"
+    # When: "DDDD_HH:MM:SS" — always a duration; convert to total seconds
     elseif all(mat.captures[1:2] .=== nothing)
-        if parse(Int, mat.captures[3]) == 0 
-            ## if days field is speficied but zero does this denotes a Period??
-            ## (c.f. Time), if so we should return a CompundPeriod type
-            #return Hour(h) + Minute(m) + Second(s)
-            
-            # Do simple case of just returning a Time obj. for now
-            return Time(h,m,s)
-        end 
+        days = parse(Int, mat.captures[3])
+        return Second(days * 86400 + h * 3600 + m * 60 + s)
     end
 
     @warn """ Failed to parse $(string) """

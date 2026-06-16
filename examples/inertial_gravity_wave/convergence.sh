@@ -19,14 +19,13 @@ for dir in 200km 100km 50km 25km; do
     cd $dir
     cp ../Moka.yaml ./config.yml
 
-    # Scale dt linearly with cell width to hold a constant CFL (~0.24), so the
-    # RK4 temporal error (~dx^4) stays subdominant to the spatial error (~dx^2)
-    # and the spatial convergence order (~2) is measured cleanly.
+    # Scale dt quadratically with cell width (dt ∝ Δx²) so temporal error stays
+    # O(Δx²) and does not pollute the spatial convergence measurement.
     case $dir in
-        200km) dt="0000_00:04:00" ;;  # 480 s
-        100km) dt="0000_00:02:00" ;;  # 240 s
-        50km)  dt="0000_00:01:00" ;;  # 120 s
-        25km)  dt="0000_00:00:30" ;;  #  60 s
+        200km) dt="0000_00:06:40" ;;  # 400 s  (floor(200e3^2 / 1e8))
+        100km) dt="0000_00:01:40" ;;  # 100 s  (floor(100e3^2 / 1e8))
+        50km)  dt="0000_00:00:25" ;;  #  25 s  (floor( 50e3^2 / 1e8))
+        25km)  dt="0000_00:00:06" ;;  #   6 s  (floor( 25e3^2 / 1e8))
     esac
     sed -i.bak "s/config_dt:.*/config_dt: ${dt}/" config.yml && rm -f config.yml.bak
 
