@@ -5,6 +5,7 @@ using Statistics
 using Dates
 using LinearAlgebra
 using DataFrames
+using Printf
 
 # %% Exact Solution Struct
 """
@@ -132,18 +133,16 @@ end
 
 Parse MOJO output: extract timestep, final time, SSH, and normal velocity.
 """
-function preprocess_MOJO(ds::NCDataset)
-    # time is a variable, not an attribute
-    T_f = Float64(Array(ds["time"][:])[end])
+function preprocess_MOJO(ds::NCDataset; frame::Int=0)
+    times = Array(ds["time"][:])
+    t     = frame == 0 ? length(times) : frame
 
     # dt is a global attribute
-    dt = Float64(ds.attrib["dt"])
+    dt  = Float64(ds.attrib["dt"])
+    T_f = Float64(times[t])
 
-    # ssh is (nCells,) — no time dimension
-    ssh_num = Array(ds["ssh"][:])
-
-    # normalVelocity is (nEdges × nVertLevels), take surface level
-    vel_num = Array(ds["normalVelocity"][:, 1])
+    ssh_num = Array(ds["ssh"][:, t])
+    vel_num = Array(ds["normalVelocity"][:, 1, t])
 
     return dt, T_f, ssh_num, vel_num
 end
@@ -154,7 +153,7 @@ end
 
 Load numerical results, compute analytical solution, and return comparison dict.
 """
-function read_and_compare(ds_fp::String, mesh_fp::String)
+function read_and_compare(ds_fp::String, mesh_fp::String; frame::Int=0)
 
     num_ds = NCDataset(ds_fp)
 
@@ -167,7 +166,7 @@ function read_and_compare(ds_fp::String, mesh_fp::String)
     else
         mesh_ds = NCDataset(mesh_fp)
         exact   = ExactSolution(mesh_ds)
-        dt, T_f, ssh_num, vel_num = preprocess_MOJO(num_ds)
+        dt, T_f, ssh_num, vel_num = preprocess_MOJO(num_ds; frame=frame)
         dcEdge  = mean(Array(num_ds["dcEdge"][:])) / 1e3
     end
 
@@ -245,8 +244,67 @@ function plot_fields(results::Dict, exact::ExactSolution, res_num::String="")
     return fig
 end
 
+# %% Animation of SSH fields
+"""
+    animate_fields(ds_fp, mesh_fp, out_path; fps) -> out_path
+
+Record a GIF showing numerical SSH, exact SSH, and SSH error for every
+checkpoint frame in `ds_fp`, evaluated against the IGW exact solution.
+"""
+function animate_fields(ds_fp::String, mesh_fp::String, out_path::String; fps::Int=8)
+    num_ds  = NCDataset(ds_fp)
+    mesh_ds = NCDataset(mesh_fp)
+
+    exact = ExactSolution(mesh_ds)
+    nT    = length(num_ds.dim["time"])
+    times = Array(num_ds["time"][1:nT])
+
+    ssh_num_all = Array(num_ds["ssh"][:, 1:nT])   # (nCells, nT)
+    close(num_ds)
+    close(mesh_ds)
+
+    # Precompute exact SSH at every output time
+    ssh_ext_all = hcat([ssh(exact, t) for t in times]...)   # (nCells, nT)
+    ssh_err_all = ssh_ext_all .- ssh_num_all
+
+    ssh_lim = max(maximum(abs, ssh_ext_all), 1e-10)
+    err_lim = max(maximum(abs, ssh_err_all), 1e-10)
+
+    xc = exact.xCell ./ 1e3
+    yc = exact.yCell ./ 1e3
+
+    frame_i   = Observable(1)
+    num_obs   = @lift ssh_num_all[:, $frame_i]
+    ext_obs   = @lift ssh_ext_all[:, $frame_i]
+    err_obs   = @lift ssh_err_all[:, $frame_i]
+    title_obs = @lift @sprintf("Numerical SSH  (t = %.1f s)", times[$frame_i])
+
+    fig = Figure(size=(1200, 380))
+
+    ax1 = Axis(fig[1, 1], title=title_obs, xlabel="x (km)", ylabel="y (km)", aspect=1)
+    s1 = scatter!(ax1, xc, yc; color=num_obs, colormap=:RdBu,
+                  colorrange=(-ssh_lim, ssh_lim), markersize=5)
+    Colorbar(fig[1, 2], s1; label="SSH (m)")
+
+    ax2 = Axis(fig[1, 3], title="Exact SSH", xlabel="x (km)", aspect=1)
+    s2 = scatter!(ax2, xc, yc; color=ext_obs, colormap=:RdBu,
+                  colorrange=(-ssh_lim, ssh_lim), markersize=5)
+    Colorbar(fig[1, 4], s2; label="SSH (m)")
+
+    ax3 = Axis(fig[1, 5], title="Error", xlabel="x (km)", aspect=1)
+    s3 = scatter!(ax3, xc, yc; color=err_obs, colormap=:balance,
+                  colorrange=(-err_lim, err_lim), markersize=5)
+    Colorbar(fig[1, 6], s3; label="SSH error (m)")
+
+    record(fig, out_path, 1:nT; framerate=fps) do i
+        frame_i[] = i
+    end
+
+    return out_path
+end
+
 # %% Main Script: Convergence Plot
-# Usually runs on different resolutions like 240km, 120km, 60km, 30km or something equivalent for gyre. 
+# Usually runs on different resolutions like 240km, 120km, 60km, 30km or something equivalent for gyre.
 # We'll put generic folders here, adjusting based on actual simulated data.
 
 # res_dirs = ["40km", "20km", "10km"]
@@ -262,7 +320,5 @@ results, exact = read_and_compare(out_fp, mesh_fp)
 fig = plot_fields(results, exact, res)
 display(fig)
 
-# %%
-xCell = exact.xCell
-yCell = exact.yCell
-res_num = reshape(results["ssh_num"], )
+# %% Plot time-series
+animate_fields(out_fp, mesh_fp, joinpath(dir_, "animation.gif"))

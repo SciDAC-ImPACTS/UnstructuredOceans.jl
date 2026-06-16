@@ -41,7 +41,7 @@ end
 # Helper function that runs the model "loop" without instantiating new memory or performing I/O.
 # This is what we call AD on. At the end we also sum up the squared SSH for testing purposes.
 function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simulationAlarm, outputAlarm;
-                      backend=CPU(), print_interval=500)
+                      backend=CPU(), print_interval=500, output_ds=nothing)
     Mesh = Setup.mesh
 
     total_ms    = Dates.value(Millisecond(simulationAlarm.ringTime - clock.startTime))
@@ -56,6 +56,10 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
                        (total_secs % 3600) ÷ 60, total_secs % 60)
     @printf("  Running %d steps (dt = %ds, duration = %s)\n",
             total_steps, dt_ms ÷ 1000, dur_str)
+
+    # frame 1 is the initial state written by io_initialize; next frame starts at 2
+    frame        = 1
+    last_written = clock.startTime
 
     while !isRinging(simulationAlarm)
         advance!(clock)
@@ -82,8 +86,19 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
         end
 
         if isRinging(outputAlarm)
+            if output_ds !== nothing
+                frame += 1
+                io_writeTimestep(output_ds, Setup, Prog, frame)
+                last_written = clock.currTime
+            end
             reset!(outputAlarm)
         end
+    end
+
+    # Capture the final state if it wasn't already written at a checkpoint
+    if output_ds !== nothing && clock.currTime != last_written
+        frame += 1
+        io_writeTimestep(output_ds, Setup, Prog, frame)
     end
 
     elapsed = time() - t_start

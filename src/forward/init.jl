@@ -75,17 +75,6 @@ function ocn_setup_clock(Config::GlobalConfig)
     output_reference_time = ConfigGet(outputConfig, "reference_time")
     output_interval = ConfigGet(outputConfig, "output_interval")
 
-    ## I think I need some example of this, becuase not immediately obvious to me how to 
-    ## deal with this. Or really, what this actually would look like. 
-    #if restart_timestamp_name == "file"
-    #
-    #else 
-    #  
-    #end 
-    
-    # both config_run_duration and config_stop_time specified. Ensure that values are consitent
-
-
     if run_duration != "none" 
         clock = mpas_create_clock(dt, start_time; runDuration=run_duration)
         if stop_time != "none" 

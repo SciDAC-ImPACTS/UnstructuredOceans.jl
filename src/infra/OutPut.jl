@@ -214,9 +214,130 @@ function write_netcdf(Setup::ModelSetup,
     close(ds)
 end
 
-#function io_writeTimestep()
-#end 
-#
-#function io_finalize(ds)
-#end
+"""
+    io_initialize(Setup, Diag, Prog) -> NCDataset
+
+Create the output NetCDF file with an unlimited time dimension, write all static
+mesh variables once, and append the initial state (t = 0) as frame 1.
+Returns the open dataset so subsequent frames can be streamed in.
+"""
+function io_initialize(Setup::ModelSetup,
+                       Prog::PrognosticVars)
+
+    Mesh = Adapt.adapt_structure(KA.CPU(), Setup.mesh)
+    Prog = Adapt.adapt_structure(KA.CPU(), Prog)
+
+    clock  = Setup.timeManager
+    config = Setup.config
+
+    outputConfig    = ConfigGet(config.streams, "output")
+    output_filename = ConfigGet(outputConfig, "filename_template")
+
+    ds = NCDataset(output_filename, "c")
+
+    @unpack HorzMesh, VertMesh = Mesh
+    @unpack PrimaryCells, DualCells, Edges = HorzMesh
+
+    nEdges     = Edges.nEdges
+    nCells     = PrimaryCells.nCells
+    nVertices  = DualCells.nVertices
+    nVertLevels = VertMesh.nVertLevels
+    maxEdges   = PrimaryCells.maxEdges
+    TWO        = 2
+
+    defDim(ds, "time",       Inf)   # unlimited — grows as frames are appended
+    defDim(ds, "nCells",     nCells)
+    defDim(ds, "nEdges",     nEdges)
+    defDim(ds, "nVertices",  nVertices)
+    defDim(ds, "nVertLevels", nVertLevels)
+    defDim(ds, "maxEdges",   maxEdges)
+    defDim(ds, "TWO",        TWO)
+
+    dt = convert(Float64, Second(clock.timeStep).value)
+    ds.attrib["dt"] = dt
+
+    # Coordinate variables
+    defVar(ds, "time",    Float64, ("time",))
+    defVar(ds, "xCell",   Float64, ("nCells",))
+    defVar(ds, "yCell",   Float64, ("nCells",))
+    defVar(ds, "xEdge",   Float64, ("nEdges",))
+    defVar(ds, "yEdge",   Float64, ("nEdges",))
+    defVar(ds, "xVertex", Float64, ("nVertices",))
+    defVar(ds, "yVertex", Float64, ("nVertices",))
+
+    # Mesh metric variables
+    defVar(ds, "dcEdge",      Float64, ("nEdges",))
+    defVar(ds, "areaCell",    Float64, ("nCells",))
+    defVar(ds, "angleEdge",   Float64, ("nEdges",))
+    defVar(ds, "areaTriangle", Float64, ("nVertices",))
+
+    # Mesh connectivity variables
+    defVar(ds, "edgeSignOnCell", Int32, ("maxEdges", "nCells"))
+    defVar(ds, "nEdgesOnCell",   Int32, ("nCells",))
+    defVar(ds, "nEdgesOnEdge",   Int32, ("nEdges",))
+    defVar(ds, "cellsOnEdge",    Int32, ("TWO", "nEdges"))
+    defVar(ds, "verticesOnCell", Int32, ("maxEdges", "nCells"))
+    defVar(ds, "verticesOnEdge", Int32, ("TWO", "nEdges"))
+
+    # Data variables — trailing `time` dimension for time series
+    defVar(ds, "ssh",            Float64, ("nCells",   "time"))
+    defVar(ds, "layerThickness", Float64, ("nCells",   "nVertLevels", "time"))
+    defVar(ds, "normalVelocity", Float64, ("nEdges",   "nVertLevels", "time"))
+
+    # Write static mesh data
+    ds["xCell"][:]   = PrimaryCells.xᶜ
+    ds["yCell"][:]   = PrimaryCells.yᶜ
+    ds["xEdge"][:]   = Edges.xᵉ
+    ds["yEdge"][:]   = Edges.yᵉ
+    ds["xVertex"][:] = DualCells.xᵛ
+    ds["yVertex"][:] = DualCells.yᵛ
+
+    ds["dcEdge"][:]      = Edges.dcEdge
+    ds["areaCell"][:]    = PrimaryCells.areaCell
+    ds["areaTriangle"][:] = DualCells.areaTriangle
+    ds["nEdgesOnCell"][:] = PrimaryCells.nEdgesOnCell
+    ds["nEdgesOnEdge"][:] = Edges.nEdgesOnEdge
+
+    # Write initial state as frame 1 (t = 0)
+    ds["time"][1]              = 0.0
+    ds["ssh"][:, 1]            = Prog.ssh[end]
+    ds["layerThickness"][:, :, 1] = Prog.layerThickness[end]
+    ds["normalVelocity"][:, :, 1] = Prog.normalVelocity[end]
+
+    return ds
+end
+
+"""
+    io_writeTimestep(ds, Setup, Prog, frame)
+
+Append one snapshot of the prognostic fields at the current clock time to the
+open dataset `ds` at the given (1-based) `frame` index.
+"""
+function io_writeTimestep(ds::NCDataset,
+                          Setup::ModelSetup,
+                          Prog::PrognosticVars,
+                          frame::Int)
+
+    Prog  = Adapt.adapt_structure(KA.CPU(), Prog)
+    clock = Setup.timeManager
+
+    t = Float64(Dates.value(Second(clock.currTime - clock.startTime)))
+
+    ds["time"][frame]              = t
+    ds["ssh"][:, frame]            = Prog.ssh[end]
+    ds["layerThickness"][:, :, frame] = Prog.layerThickness[end]
+    ds["normalVelocity"][:, :, frame] = Prog.normalVelocity[end]
+
+    return nothing
+end
+
+"""
+    io_finalize(ds)
+
+Close the output dataset.
+"""
+function io_finalize(ds::NCDataset)
+    close(ds)
+    return nothing
+end
 
