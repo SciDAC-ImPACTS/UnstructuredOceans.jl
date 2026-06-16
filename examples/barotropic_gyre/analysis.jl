@@ -123,7 +123,7 @@ function barotropic_streamfunction(mesh_ds::NCDataset,
 end
 
 # %% Read MOKA output and compare
-function read_and_compare(out_fp::String, mesh_fp::String)
+function read_and_compare(out_fp::String, mesh_fp::String; frame::Int=0)
     mesh_ds = NCDataset(mesh_fp)
     num_ds  = NCDataset(out_fp)
 
@@ -131,9 +131,10 @@ function read_and_compare(out_fp::String, mesh_fp::String)
     xVertex = Array(mesh_ds["xVertex"][:]); xVertex .-= minimum(Array(mesh_ds["xEdge"][:]))
     yVertex = Array(mesh_ds["yVertex"][:]); yVertex .-= minimum(Array(mesh_ds["yEdge"][:]))
 
-    # surface fields at the final output time
-    layer_thickness = Array(num_ds["layerThickness"][:, 1])  # (nCells,) surface
-    nv_surface      = Array(num_ds["normalVelocity"][:, 1])  # (nEdges,) surface
+    # surface fields at the selected output time (default: last frame)
+    t = frame == 0 ? size(num_ds["layerThickness"], 3) : frame
+    layer_thickness = Array(num_ds["layerThickness"][:, 1, t])  # (nCells,) surface
+    nv_surface      = Array(num_ds["normalVelocity"][:, 1, t])  # (nEdges,) surface
 
     psi_num = barotropic_streamfunction(mesh_ds, layer_thickness, nv_surface)
     psi_ext = exact_streamfunction(xVertex, yVertex)
