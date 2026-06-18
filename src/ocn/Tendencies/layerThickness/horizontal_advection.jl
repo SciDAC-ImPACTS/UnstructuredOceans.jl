@@ -1,9 +1,9 @@
 
-function horizontal_advection_tendency!(Tend::TendencyVars, 
+function horizontal_advection_tendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
-                                        Diag::DiagnosticVars, 
-                                        Mesh::Mesh;
-                                        backend = KA.CPU())
+                                        Diag::DiagnosticVars,
+                                        Mesh::Mesh)
+    backend = KA.get_backend(Tend.tendLayerThickness)
 
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh

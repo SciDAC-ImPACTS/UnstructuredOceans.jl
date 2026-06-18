@@ -11,8 +11,8 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
                                      Prog::PrognosticVars,
                                      Diag::DiagnosticVars,
                                      Mesh::Mesh,
-                                     ::Type{sshGradient};
-                                     backend = KA.CPU())
+                                     ::Type{sshGradient})
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
     @unpack PrimaryCells, DualCells, Edges = HorzMesh

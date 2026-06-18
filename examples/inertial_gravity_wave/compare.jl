@@ -138,11 +138,11 @@ function preprocess_MOJO(ds::NCDataset)
     # dt is a global attribute
     dt = Float64(ds.attrib["dt"])
 
-    # ssh is (nCells,) — no time dimension
-    ssh_num = Array(ds["ssh"][:])
+    # ssh is (nCells, time) — take last time frame
+    ssh_num = Array(ds["ssh"][:, end])
 
     # normalVelocity is (nEdges × nVertLevels), take surface level
-    vel_num = Array(ds["normalVelocity"][:, 1])
+    vel_num = Array(ds["normalVelocity"][:, 1, end])
 
     return dt, T_f, ssh_num, vel_num
 end
@@ -218,8 +218,8 @@ end
 df_list = DataFrame[]
 
 for dir_ in reverse(["25km", "50km", "100km", "200km"])
-    mesh_fp   = joinpath(dir_, "initial_state.nc")
-    output_fp = joinpath(dir_, "output.nc")
+    mesh_fp   = joinpath(@__DIR__, dir_, "initial_state.nc")
+    output_fp = joinpath(@__DIR__, dir_, "output.nc")
 
     results, exact = read_and_compare(output_fp, mesh_fp)
 

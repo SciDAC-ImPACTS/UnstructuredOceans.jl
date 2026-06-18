@@ -12,8 +12,8 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
                                               Prog::PrognosticVars,
                                               Diag::DiagnosticVars,
                                               Mesh::Mesh,
-                                              ::Type{Del2};
-                                              backend = KA.CPU())
+                                              ::Type{Del2})
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
@@ -27,7 +27,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
     @unpack velocityDivCell, relativeVorticity = Diag
 
     nthreads = 50
-    kernel! = horizontalm_momentum_mixing_del2(backend, nthreads)
+    kernel! = horizontal_momentum_mixing_del2(backend, nthreads)
     kernel!(tendNormalVelocity,
             velocityDivCell,
             relativeVorticity,
@@ -45,7 +45,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
     @pack! Tend = tendNormalVelocity
 end
 
-@kernel function horizontalm_momentum_mixing_del2(tendency,
+@kernel function horizontal_momentum_mixing_del2(tendency,
                                                   @Const(div),
                                                   @Const(relVort),
                                                   @Const(cellsOnEdge),

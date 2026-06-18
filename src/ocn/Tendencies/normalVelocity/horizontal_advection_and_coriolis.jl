@@ -12,9 +12,9 @@ abstract type linearCoriolis <: Coriolis end
 function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
                                                      Prog::PrognosticVars,
                                                      Diag::DiagnosticVars,
-                                                     Mesh::Mesh, 
-                                                     ::Type{linearCoriolis}; 
-                                                     backend = KA.CPU())
+                                                     Mesh::Mesh,
+                                                     ::Type{linearCoriolis})
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
