@@ -5,17 +5,16 @@ export computeLayerThicknessTendency!
 using UnPack
 using KernelAbstractions 
 using CUDA: @allowscalar
-using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, GlobalConfig, ZeroOutVector!
+using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!
 
 const KA = KernelAbstractions
 
 include("horizontal_advection.jl")
 
-function computeLayerThicknessTendency!(Tend::TendencyVars, 
+function computeLayerThicknessTendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
-                                        Diag::DiagnosticVars, 
-                                        Mesh::Mesh, 
-                                        Config::GlobalConfig;
+                                        Diag::DiagnosticVars,
+                                        Mesh::Mesh;
                                         backend = KA.CPU())
 
     nthreads = 50

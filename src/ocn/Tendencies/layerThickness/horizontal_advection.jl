@@ -39,14 +39,14 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
     @pack! Tend = tendLayerThickness 
 end
 
-@kernel function thicknessFluxDivOnCell!(tendency, 
-                                         @Const(thicknessFlux),
-                                         @Const(nEdgesOnCell),     
-                                         @Const(edgesOnCell),
-                                         @Const(maxLevelEdgeTop),
-                                         @Const(edgeSignOnCell),
-                                         @Const(dvEdge),
-                                         @Const(areaCell))
+@kernel function thicknessFluxDivOnCell!(tendency,
+                                         thicknessFlux,
+                                         nEdgesOnCell,
+                                         edgesOnCell,
+                                         maxLevelEdgeTop,
+                                         edgeSignOnCell,
+                                         dvEdge,
+                                         areaCell)
 
     iCell = @index(Global, Linear)
 

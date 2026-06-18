@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 
+import argparse
+import os
+
 import numpy as np
-import mosaic
-import matplotlib.pyplot as plt
 import xarray as xr
 from mpas_tools.io import write_netcdf
 from mpas_tools.mesh.conversion import convert, cull
@@ -12,123 +13,148 @@ from polaris.config import PolarisConfigParser
 from polaris.mesh.planar import compute_planar_hex_nx_ny
 from polaris.ocean.vertical import init_vertical_coord
 
+# Physics parameters for the Munk (no-slip) barotropic gyre.  Values match the
+# Polaris `barotropic_gyre` task, `barotropic_gyre_munk_no-slip` section:
+# https://docs.e3sm.org/polaris/main/users_guide/ocean/tasks/barotropic_gyre.html
+# The no-slip variant is used here because Moka.jl imposes solid (no-slip) walls.
+F_0   = 1.0e-3    # Coriolis parameter at southern boundary [s⁻¹]
+BETA  = 1.0e-10   # meridional gradient of Coriolis parameter [s⁻¹ m⁻¹]
+TAU_0 = 0.1       # peak zonal wind stress [N m⁻²]
+NU_2  = 400.0     # horizontal (Laplacian) viscosity [m² s⁻¹]
+RHO   = 1000.0    # reference ocean density [kg m⁻³]
+G     = 9.80616   # gravitational acceleration [m s⁻²]
+LX    = 1200.0    # domain length in x [km]
+LY    = 1200.0    # domain length in y [km]
+H     = 5000.0    # resting depth [m]
 
-def exact_ssh_solution(
-        ds, tau_0=0.1, rho=1.e3, g=9.81, nu_2=4.e2, beta=1e-11, f_0=1e-4):
+
+def munk_layer_width():
+    """Anticipated width of the lateral (Munk) boundary layer [m]."""
+    return (2.0 * np.pi) / np.sqrt(3.0) * (NU_2 / BETA) ** (1.0 / 3.0)
+
+
+def exact_streamfunction(x, y, boundary_condition='no-slip',
+                         beta=BETA, nu=NU_2):
+    """Exact barotropic streamfunction for the linearized Munk experiment.
+
+    Mirrors `Analysis.exact_solution` in the Polaris barotropic_gyre task.
+    `x`, `y` are coordinates (already shifted to the domain origin) in metres.
     """
-    Exact solution to the sea surface height for the linearized Munk layer
-    experiments. 
+    L_x = float(x.max() - x.min())
+    L_y = float(y.max() - y.min())
+
+    delta_m = (nu / (beta * L_y ** 3.0)) ** (1.0 / 3.0)
+    gamma = (np.sqrt(3.0) * x) / (2.0 * delta_m * L_x)
+
+    if boundary_condition == 'no-slip':
+        psi = np.pi * np.sin(np.pi * y / L_y) * (
+            1.0 - (x / L_x)
+            - np.exp(-x / (2.0 * delta_m * L_x))
+            * (np.cos(gamma)
+               + ((1.0 - 2.0 * delta_m) / np.sqrt(3.0)) * np.sin(gamma))
+            + delta_m * np.exp(((x / L_x) - 1.0) / delta_m)
+        )
+    elif boundary_condition == 'free-slip':
+        psi = np.pi * np.sin(np.pi * (y / L_y)) * (
+            (1.0 - (x / L_x) - delta_m)
+            + np.exp((-(x / L_x)) / (2.0 * delta_m))
+            * ((-2.0 / 3.0) * (1.0 - delta_m) * np.cos(gamma - (np.pi / 6.0))
+               + (2.0 / np.sqrt(3.0)) * np.sin(gamma))
+            + delta_m * np.exp((((x / L_x) - 1.0) / delta_m))
+        )
+    else:
+        raise ValueError(f'unknown boundary_condition: {boundary_condition}')
+
+    return psi
+
+
+def create_initial_state(resolution_km, output_dir):
+    """Create initial_state.nc and culled_mesh.nc for one resolution.
 
     Parameters
     ----------
-    ds : xarray.Dataset
-        Must contain the fields: `xCell`, `yCell`, ....
-    tau_0 : Float
-        .... [N m-2]
-    rho : Float 
-        Constant ocean density [kg m-3]
-    g : Float 
-        Gravitational acceleration constant [m s-2]
-    nu_2 : Float 
-        Viscosity [m2 s-1]
-    beta : Float 
-        ... [s-1 m-1]
-    f_0 : Float
-        ... [s-1]
+    resolution_km : float
+        Grid cell spacing in kilometres.
+    output_dir : str
+        Directory where output files are written.
     """
-    
-    get_extent = lambda x: float(x.max() - x.min())
+    os.makedirs(output_dir, exist_ok=True)
 
-    L_x = get_extent(ds.xCell)
-    L_y = get_extent(ds.yCell)
-    layerThickness = ds.restingThickness.squeeze()
+    dc = resolution_km * 1e3
+    nx, ny = compute_planar_hex_nx_ny(LX, LY, resolution_km)
 
-    pi = np.pi
-    sqrt3 = np.sqrt(3)
-    delta_m = (nu_2 / beta)**(1. / 3.)
-    gamma = (sqrt3 * ds.xCell)  / (2. * delta_m)
-
-    ssh = (tau_0 / (rho * g * layerThickness)) * (ds.fCell / beta) *\
-          (1. - ds.xCell / L_x) * pi * np.sin(pi * ds.yCell / L_y) *\
-          (1. - np.exp(-1. * ds.xCell / (2. * delta_m)) *\
-          (np.cos(gamma) + (1. / sqrt3) * np.sin(gamma)))
-
-    return ssh 
-
-def create_initial_state(config):
-    """Create the at rest inital condition for the barotropic gyre testcase
-
-    Paramerts
-    ---------
-
-    config: polaris.config.PolarisConfigParser
-        Configuration file with `vertical_grid` and `barotropic_gyre` sections
-    """
-    # domain parameters
-    Lx = config.getfloat("barotropic_gyre", "Lx")
-    Ly = config.getfloat("barotropic_gyre", "Ly")
-    resolution = config.getfloat("barotropic_gyre", "resolution")
-
-    # convert cell spacing to meters
-    dc = resolution * 1e3 
-    
-    nx, ny = compute_planar_hex_nx_ny(Lx, Ly, resolution)
+    # Non-periodic mesh: the gyre is bounded by solid walls on all sides
     ds_mesh = make_planar_hex_mesh(
         nx=nx, ny=ny, dc=dc, nonperiodic_x=True, nonperiodic_y=True
-        )
-    
+    )
     ds_mesh = cull(ds_mesh)
     ds_mesh = convert(ds_mesh)
 
-    write_netcdf(ds_mesh, 'culled_mesh.nc')
+    write_netcdf(ds_mesh, os.path.join(output_dir, 'culled_mesh.nc'))
 
-    # vertical coordinate parameters
-    bottom_depth = config.getfloat('vertical_grid', 'bottom_depth')
-    # coriolis parameters
-    f_0 = config.getfloat("barotropic_gyre", "f_0")
-    beta = config.getfloat("barotropic_gyre", "beta")
-    # surface (wind) forcing parameters
-    tau_0 = config.getfloat("barotropic_gyre", "tau_0")
-    # horizontal momentum diffusion parameters
-    nu_2 = config.getfloat("barotropic_gyre", "nu_2")
-    
-    # calculate the boundary layer thickness for specified parameters
-    M = (np.pi * 2) / np.sqrt(3) * (nu_2 / beta)**(1. / 3.)
+    # Beta-plane Coriolis on cells, edges, and vertices: f = f0 + beta * y
+    for loc in ['Cell', 'Edge', 'Vertex']:
+        ds_mesh[f'f{loc}'] = F_0 + BETA * ds_mesh[f'y{loc}']
 
-    # ensure the boundary layer is at least 3 gridcells wide
-    if M <= 3. * resolution:
-        raise ValueError("resolution is too coarse to properly resolve the"
-                         "the boundary (i.e. Munk) layer")
+    # Vertical grid from config.cfg (ocean.cfg supplies framework defaults)
+    config = PolarisConfigParser()
+    config.add_from_package('polaris.ocean', 'ocean.cfg')
+    config.add_from_file('config.cfg')
 
-    # create a copy of the culled mesh to place the IC's into
     ds = ds_mesh.copy()
 
-    # set the ssh initial condition to zero
-    ds["ssh"] = xr.zeros_like(ds.xCell)
-    ds['bottomDepth'] = bottom_depth * xr.ones_like(ds.xCell)
-    
-    # use polaris framework functions to initialize the vertical coordinatek
+    # Ocean at rest: zero SSH, flat bottom
+    ds['ssh'] = xr.zeros_like(ds_mesh.xCell)
+    ds['bottomDepth'] = H * xr.ones_like(ds_mesh.xCell)
+
     init_vertical_coord(config, ds)
-     
-    # set the coriolis values 
-    for loc in ["Cell", "Edge", "Vertex"]: 
-        ds[f"f{loc}"] = f_0 + beta * ds[f"y{loc}"]
-    
-    # set the wind stress forcing 
-    ds["windStressZonal"] = -1. * tau_0 * np.cos(np.pi * ds.xEdge / Lx * 1e3)
-    ds["windStressMeridional"] = xr.zeros_like(ds.xEdge)
-    
-    # set the initial condition for normalVelocity
-    ds["normalVelocity"] = xr.zeros_like(ds.xEdge).expand_dims(["Time", 
-                                                                "nVertLevels"],
-                                                               axis=[0,-1])
-    
-    # write the initial condition file
-    write_netcdf(ds_mesh, 'initial_state.nc')
 
-    return ds_mesh
+    # layerThickness = (ssh + H) broadcast over nVertLevels
+    layer_thickness = ds['ssh'] + H
+    layer_thickness, _ = xr.broadcast(layer_thickness, ds.refBottomDepth)
+    ordered = [d for d in ['Time', 'nCells', 'nVertLevels'] if d in layer_thickness.dims]
+    layer_thickness = layer_thickness.transpose(*ordered)
+    if 'Time' not in layer_thickness.dims:
+        layer_thickness = layer_thickness.expand_dims(dim='Time', axis=0)
+    ds['layerThickness'] = layer_thickness
 
-config = PolarisConfigParser()
-config.add_from_file("config.cfg")
+    # Normal velocity initial condition: at rest
+    norm_vel = xr.zeros_like(ds_mesh.xEdge)
+    norm_vel, _ = xr.broadcast(norm_vel, ds.refBottomDepth)
+    ds['normalVelocity'] = norm_vel.transpose(
+        'nEdges', 'nVertLevels'
+    ).expand_dims(dim='Time', axis=0)
 
-create_initial_state(config)
+    # Zonal wind stress forcing: tau_x = -tau_0 * cos(pi * (y - y_min) / Ly)
+    ly_m = LY * 1e3
+    wind_stress_zonal = -TAU_0 * np.cos(
+        np.pi * (ds.yCell - ds.yCell.min()) / ly_m
+    )
+    ds['windStressZonal'] = wind_stress_zonal.expand_dims(dim='Time', axis=0)
+    ds['windStressMeridional'] = xr.zeros_like(ds.xCell).expand_dims(
+        dim='Time', axis=0
+    )
+
+    write_netcdf(ds, os.path.join(output_dir, 'initial_state.nc'))
+
+    m = munk_layer_width()
+    print(f'Done: {output_dir}/initial_state.nc')
+    print(f'  resolution={resolution_km} km, nx={nx}, ny={ny}')
+    print(f'  Munk layer width ~{m / 1e3:.1f} km '
+          f'({m / dc:.1f} cells)')
+    if m <= 3.0 * dc:
+        print('  WARNING: resolution is too coarse to resolve the Munk layer '
+              '(want >= 3 cells)')
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Generate barotropic gyre ICs for Moka.jl'
+    )
+    parser.add_argument('--res', type=float, required=True,
+                        help='Grid resolution in km (e.g. 20, 10)')
+    parser.add_argument('--dir', type=str, required=True,
+                        help='Output directory (e.g. 10km)')
+    args = parser.parse_args()
+
+    create_initial_state(args.res, args.dir)

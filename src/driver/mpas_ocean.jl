@@ -37,14 +37,12 @@ function ocn_run(config_fp, backend = KA.CPU())
     timestep = KA.zeros(backend, Float64, (1,))
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
 
-    ocn_run_loop(timestep, Prog, Diag, Tend, Setup, ForwardEuler, clock, simulationAlarm, outputAlarm; backend=backend)
-
-    #
-    # Writing to outputs
-    #
-    
-    # Only suport i/o at the end of the simulation for now 
-    write_netcdf(Setup, Diag, Prog)
+    ti_str     = MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"), "config_time_integrator")
+    integrator = parse_integrator(ti_str)
+    println("Time integrator: $integrator")
+    output_ds = io_initialize(Setup, Prog)
+    ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simulationAlarm, outputAlarm; backend=backend, output_ds=output_ds)
+    io_finalize(output_ds)
     
     backend = get_backend(Tend.tendNormalVelocity)
     arch = typeof(backend) <: KA.GPU ? "GPU" : "CPU"

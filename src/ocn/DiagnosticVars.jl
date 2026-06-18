@@ -72,7 +72,7 @@ mutable struct DiagnosticVars{F <: AbstractFloat, FV2 <: AbstractArray{F,2}}
     end
 end 
  
-function DiagnosticVars(config::GlobalConfig, Mesh::Mesh; backend=KA.CPU())
+function DiagnosticVars(Mesh::Mesh; backend=KA.CPU())
 
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
@@ -156,8 +156,8 @@ function calculate_thicknessFlux!(Diag::DiagnosticVars,
 end
 
 @kernel function compute_thicknessFlux!(thicknessFlux,
-                                        @Const(normalVelocity),
-                                        @Const(layerThicknessEdge),
+                                        normalVelocity,
+                                        layerThicknessEdge,
                                         arrayLength)
 
     j = @index(Global, Linear)

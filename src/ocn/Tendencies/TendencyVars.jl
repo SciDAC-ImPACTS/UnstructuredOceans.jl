@@ -48,7 +48,7 @@ mutable struct TendencyVars{F<:AbstractFloat, FV2 <: AbstractArray{F,2}}
     end
 end 
 
-function TendencyVars(Config::GlobalConfig, Mesh::Mesh; backend=CUDABackend())
+function TendencyVars(Mesh::Mesh; backend=CUDABackend())
         
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, Edges = HorzMesh
