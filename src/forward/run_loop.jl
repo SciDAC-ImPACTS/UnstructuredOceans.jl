@@ -1,4 +1,4 @@
-using CUDA: @allowscalar
+using GPUArraysCore: @allowscalar
 using KernelAbstractions
 
 # Thresholds beyond which the simulation is considered diverged.
@@ -41,7 +41,7 @@ end
 # Helper function that runs the model "loop" without instantiating new memory or performing I/O.
 # This is what we call AD on. At the end we also sum up the squared SSH for testing purposes.
 function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simulationAlarm, outputAlarm;
-                      backend=CPU(), print_interval=500, output_ds=nothing)
+                      print_interval=500, output_ds=nothing)
     Mesh = Setup.mesh
 
     total_ms    = Dates.value(Millisecond(simulationAlarm.ringTime - clock.startTime))
@@ -64,9 +64,9 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
     while !isRinging(simulationAlarm)
         advance!(clock)
         if integrator === RungeKutta4
-            ocn_timestep(Prog, Diag, Tend, Setup, RungeKutta4; backend=backend)
+            ocn_timestep(Prog, Diag, Tend, Setup, RungeKutta4)
         else
-            ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator; backend=backend)
+            ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
         end
         step += 1
 
@@ -112,10 +112,11 @@ end
 # sumCPU is intentionally absent: copyto!(cpu, gpu) lowers to cuMemcpyDtoHAsync_v2
 # which carries a gc-transition LLVM operand bundle that Enzyme's GradientUtils
 # does not support. The caller must pre-seed d_sumGPU and do the D2H copy outside autodiff.
-function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, integrator, clock, simulationAlarm, outputAlarm; backend=CUDABackend())
+function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, integrator, clock, simulationAlarm, outputAlarm)
+    backend = KernelAbstractions.get_backend(Prog.ssh[end])
     while !isRinging(simulationAlarm)
         advance!(clock)
-        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator; backend=backend)
+        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
         if isRinging(outputAlarm)
             reset!(outputAlarm)
         end

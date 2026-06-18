@@ -23,10 +23,11 @@ function parse_integrator(name::AbstractString)
     end
 end
 
-using CUDA: @allowscalar
+using GPUArraysCore: @allowscalar
 using KernelAbstractions
 
-function advanceTimeLevels!(Prog::PrognosticVars; backend=CUDABackend())
+function advanceTimeLevels!(Prog::PrognosticVars)
+    backend = KernelAbstractions.get_backend(first(Prog.ssh))
 
     nthreads = 100
 
@@ -78,13 +79,13 @@ function ocn_timestep(Prog::PrognosticVars,
                       Diag::DiagnosticVars,
                       Tend::TendencyVars,
                       S::ModelSetup,
-                      ::Type{RungeKutta4};
-                      backend = KA.CPU())
+                      ::Type{RungeKutta4})
+    backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
     Mesh  = S.mesh
     Clock = S.timeManager
 
-    advanceTimeLevels!(Prog; backend=backend)
+    advanceTimeLevels!(Prog)
 
     dt = convert(Float64, Dates.value(Second(Clock.timeStep)))
 
@@ -108,11 +109,11 @@ function ocn_timestep(Prog::PrognosticVars,
     ssh_kernel! = Update_ssh!(backend, nthreads)
     ssh_length  = length(ssh[end])
 
-    diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
+    diagnostic_compute!(Mesh, Diag, Prog)
 
     for RK_step in 1:4
-        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; backend=backend)
-        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh; backend=backend)
+        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
+        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
 
         @unpack tendNormalVelocity, tendLayerThickness = Tend
 
@@ -120,7 +121,7 @@ function ocn_timestep(Prog::PrognosticVars,
             normalVelocity[end] .= normalVelocityCurr .+ a[RK_step] .* tendNormalVelocity
             layerThickness[end] .= layerThicknessCurr .+ a[RK_step] .* tendLayerThickness
             ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
-            diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
+            diagnostic_compute!(Mesh, Diag, Prog)
         end
 
         normalVelocityNew .+= b[RK_step] .* tendNormalVelocity
@@ -133,7 +134,7 @@ function ocn_timestep(Prog::PrognosticVars,
 
     @pack! Prog = ssh, normalVelocity, layerThickness
 
-    diagnostic_compute!(Mesh, Diag, Prog; backend=backend)
+    diagnostic_compute!(Mesh, Diag, Prog)
 end
 
 function ocn_timestep(timestep,
@@ -141,26 +142,24 @@ function ocn_timestep(timestep,
                       Diag::DiagnosticVars,
                       Tend::TendencyVars,
                       Mesh::Mesh,
-                      ::Type{ForwardEuler};
-                      backend = CUDABackend())
+                      ::Type{ForwardEuler})
+    backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
     # advance the timelevels within the state strcut
-    advanceTimeLevels!(Prog; backend=backend)
+    advanceTimeLevels!(Prog)
 
     # unpack the state variable arrays
     @unpack ssh, normalVelocity, layerThickness = Prog
 
     # compute the diagnostics
-    diagnostic_compute!(Mesh, Diag, Prog; backend = backend)
+    diagnostic_compute!(Mesh, Diag, Prog)
 
     # compute normalVelocity tenedency
-    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh;
-                                   backend = backend)
+    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
 
     # compute layerThickness tendency
-    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh;
-                                   backend = backend)
-    
+    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
+
     # update the state variables by the tendencies
     nthreads = 50
     tendKernel! = UpdateStateVariable!(backend, nthreads)

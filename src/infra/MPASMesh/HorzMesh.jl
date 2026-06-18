@@ -1,4 +1,3 @@
-using CUDA
 using UnPack
 using Accessors
 using NCDatasets

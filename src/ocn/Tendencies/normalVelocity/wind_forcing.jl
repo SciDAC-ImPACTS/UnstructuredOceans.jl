@@ -1,7 +1,7 @@
 function wind_forcing_tendency!(Tend::TendencyVars,
                                 Diag::DiagnosticVars,
-                                Mesh::Mesh;
-                                backend = KA.CPU())
+                                Mesh::Mesh)
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
     @unpack Edges = HorzMesh
