@@ -98,8 +98,8 @@ function animate_fields(ts::Dict, out_path::String, nT; fps::Int=8)
     ye = ts["yEdge"] ./ 1e3
     # nT = length(ts["time"])
 
-    ssh_lim = max(maximum(abs, ts["ssh"]), 1e-10)
-    vel_lim = max(maximum(abs, ts["vel"]), 1e-10)
+    # ssh_lim = max(maximum(abs, ts["ssh"]), 1e-10)
+    # vel_lim = max(maximum(abs, ts["vel"]), 1e-10)
 
     frame_i = Observable(1)
     ssh_obs   = @lift ts["ssh"][:, $frame_i]
@@ -141,5 +141,5 @@ display(fig)
 
 # %% Animate time-series of SSH and normal velocity
 ts = read_timeseries(out_fp, mesh_fp)
-nT = 100
+nT = 26
 animate_fields(ts, joinpath(@__DIR__, "animation.mp4"), nT)
