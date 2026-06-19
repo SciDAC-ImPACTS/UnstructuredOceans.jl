@@ -4,6 +4,8 @@ import KernelAbstractions as KA
 using Enzyme
 using FiniteDifferences
 using MOKA
+using CUDA
+import CUDA: @allowscalar
 
 Enzyme.EnzymeRules.inactive_type(::Type{<:KA.Kernel}) = true
 
@@ -20,16 +22,7 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:Clock}) = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:OneTimeAlarm}) = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:PeriodicAlarm}) = true
 
-function ocn_run_loop_enzyme(
-    sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler,
-    clock, simulationAlarm, outputAlarm, backend
-)
-    ocn_run_loop(
-        sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler,
-        clock, simulationAlarm, outputAlarm; backend=backend
-    )
-end
-
+# %%
 function ocn_run_with_ad(config_fp, k, backend)
     Setup, Diag, Tend, Prog = ocn_init(config_fp, backend=backend)
     clock, simulationAlarm, outputAlarm = ocn_init_alarms(Setup)
@@ -46,7 +39,7 @@ function ocn_run_with_ad(config_fp, k, backend)
     d_Tend = Enzyme.make_zero(Tend)
 
     autodiff(Enzyme.Reverse,
-        ocn_run_loop_enzyme,
+        ocn_run_loop,
         Duplicated(sumGPU, d_sumGPU),
         Duplicated(timestep, d_timestep),
         Duplicated(Prog, d_Prog),
@@ -57,7 +50,6 @@ function ocn_run_with_ad(config_fp, k, backend)
         Const(clock),
         Const(simulationAlarm),
         Const(outputAlarm),
-        Const(backend)
     )
 
     @show d_Prog.normalVelocity[end][1:10]
@@ -88,7 +80,7 @@ function ocn_run_fd(config_fp, k, backend)
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
         perturb!(Prog)
         ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, ForwardEuler,
-                     clock, sim_alarm, out_alarm; backend=backend)
+                     clock, sim_alarm, out_alarm)
         Array(sumGPU)[1]
     end
 
@@ -103,12 +95,14 @@ function ocn_run_fd(config_fp, k, backend)
     return d_layer_fd, d_vel_fd
 end
 
-res = "10km_old"
+# %% Run
+res = "10km"
 cd(joinpath(@__DIR__, res))
 config_fn = "./enzyme_config.yml"
 
 cell = 5
 arch = KA.CPU()
+# arch = GPU()
 
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)

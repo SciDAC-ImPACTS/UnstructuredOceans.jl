@@ -45,7 +45,7 @@ function ocn_run_loop_enzyme(
 )
     ocn_run_loop(
         sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler,
-        clock, simulationAlarm, outputAlarm; backend=backend
+        clock, simulationAlarm, outputAlarm;
     )
 end
 
@@ -57,7 +57,7 @@ function ocn_run_with_ad(config_fp, k, backend)
     #
 
     # Initialize the Model
-    Setup, Diag, Tend, Prog = ocn_init(config_fp, backend=backend)
+    Setup, Diag, Tend, Prog = ocn_init(config_fp)
     clock, simulationAlarm, outputAlarm = ocn_init_alarms(Setup)
     timestep = KA.zeros(backend, Float64, (1,))
     d_timestep = KA.zeros(backend, Float64, (1,))
@@ -112,7 +112,7 @@ end
 function ocn_run_fd(config_fp, k, backend)
 
     # Sample initial values from an unperturbed model initialisation
-    Setup0, _, _, Prog0 = ocn_init(config_fp, backend=backend)
+    Setup0, _, _, Prog0 = ocn_init(config_fp,)
     x_layer = @allowscalar Prog0.layerThickness[end][1, k]
     x_vel   = @allowscalar Prog0.normalVelocity[end][1, k]
 
@@ -123,14 +123,14 @@ function ocn_run_fd(config_fp, k, backend)
     # Helper: fresh model run returning sum(ssh²) given a perturbed scalar input.
     # D2H copy happens here, outside Enzyme's traced region.
     function run_model(config_fp, backend, perturb!)
-        Setup, Diag, Tend, Prog = ocn_init(config_fp, backend=backend)
+        Setup, Diag, Tend, Prog = ocn_init(config_fp,)
         clock, sim_alarm, out_alarm = ocn_init_alarms(Setup)
         timestep = KA.zeros(backend, Float64, (1,))
         sumGPU   = KA.zeros(backend, Float64, (1,))
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
         perturb!(Prog)
         ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, ForwardEuler,
-                     clock, sim_alarm, out_alarm; backend=backend)
+                     clock, sim_alarm, out_alarm;)
         Array(sumGPU)[1]
     end
 
@@ -153,8 +153,8 @@ cd(joinpath(@__DIR__, res))
 config_fn = "./config.yml"
 
 cell = 5
-# arch = KA.CPU()
-arch = CUDABackend()
+arch = KA.CPU()
+# arch = GPU()
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)
 
