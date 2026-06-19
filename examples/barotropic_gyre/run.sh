@@ -31,7 +31,7 @@ for dir in 10km; do
     start=$(date +%s.%N)
 
     #srun -n 1 julia --project=$gitdir -- $execut config.yml
-    julia -O0 --color=yes --project=$gitdir -- $execut config.yml
+    julia -O0 --color=yes --project=$gitdir -- $execut config.yml $1
 
     end=$(date +%s.%N)
 
