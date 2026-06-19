@@ -63,11 +63,7 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
 
     while !isRinging(simulationAlarm)
         advance!(clock)
-        if integrator === RungeKutta4
-            ocn_timestep(Prog, Diag, Tend, Setup, RungeKutta4)
-        else
-            ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
-        end
+        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
         step += 1
 
         if step % print_interval == 0
