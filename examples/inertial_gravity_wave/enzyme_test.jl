@@ -6,36 +6,9 @@ using Enzyme
 using FiniteDifferences
 using MOKA
 
-# KA Kernel objects (backend + function ref) are not differentiable; marking them
-# inactive forces Enzyme to treat kernel locals as Const, which is required for
-# KA's own augmented_primal/reverse rules (func::Const{<:Kernel}) to fire instead
-# of Enzyme tracing into CUDA kernel compilation code that involves Module types.
-Enzyme.EnzymeRules.inactive_type(::Type{<:KA.Kernel}) = true
-
-# Mesh geometry is never differentiable. These inactive_type declarations cover
-# the full type hierarchy so Enzyme's static analysis never treats mesh-derived
-# CuArrays as potentially-active. Without this, two failure modes occur:
-#   1. EnzymeRuntimeActivityError: Enzyme sees a Const mutable struct's CuArray
-#      heap pointer stored to the callee's stack (!enzymejl_byref_MUT_REF).
-#   2. GPU segfault at synchronize: runtime activity analysis incorrectly activates
-#      mesh CuArrays that are annotated @Const in GPU kernels; reverse kernels then
-#      try to write gradients to read-only GPU memory.
-import MOKA.MPASMesh
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Mesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.HorzMesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.VerticalMesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.PrimaryCells}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.DualCells}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Edges}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.ActiveLevels}) = true
-
-# Clock and alarm types contain DateTime / Dict / Period fields that are not
-# differentiable.  Enzyme.make_zero produces invalid shadows for them and can
-# corrupt the backward tape, triggering GPU segfaults.  Mark the whole type
-# hierarchy inactive; clock/alarms are pure loop-control, not model state.
-Enzyme.EnzymeRules.inactive_type(::Type{<:Clock}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:OneTimeAlarm}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:PeriodicAlarm}) = true
+# The Enzyme `inactive_type` guards for mesh / clock / alarm types now ship with
+# MOKA via the MOKAEnzymeExt package extension, which loads automatically here
+# because both MOKA and Enzyme are in scope. No need to declare them per-script.
 
 # Enzyme.autodiff does not support keyword arguments, so `backend` is positional here.
 # sumCPU is intentionally absent: see ocn_run_loop in run_loop.jl for the reason.
@@ -158,13 +131,10 @@ arch = KA.CPU()
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)
 
+println("AD vs FD comparison for cell $cell")
+@show (d_firstlayer_ad, d_firstlayer_fd)
+@show (d_firstvelocity_ad, d_firstvelocity_fd);
+
 # %%
 @test isapprox(d_firstlayer_ad, d_firstlayer_fd, atol=1e-4)
 @test isapprox(d_firstvelocity_ad, d_firstvelocity_fd, atol=1e-4)
-
-# %% CUDA AD test
-# d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, CUDABackend())
-# d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, CUDABackend())
-
-# @test isapprox(d_firstlayer_ad, d_firstlayer_fd, atol=1e-4)
-# @test isapprox(d_firstvelocity_ad, d_firstvelocity_fd, atol=1e-2)

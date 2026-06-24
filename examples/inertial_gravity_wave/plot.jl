@@ -318,6 +318,7 @@ results, exact = read_and_compare(out_fp, mesh_fp)
 # push!(df_list, log_error(results))
 fig = plot_fields(results, exact, res)
 display(fig)
+save("ssh_comparison_$(res).png", fig; px_per_unit = 2)
 
 # %% Plot time-series
 nT = 100

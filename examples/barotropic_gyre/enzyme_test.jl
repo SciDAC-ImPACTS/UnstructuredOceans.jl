@@ -6,21 +6,7 @@ using FiniteDifferences
 using MOKA
 using CUDA
 import CUDA: @allowscalar
-
-Enzyme.EnzymeRules.inactive_type(::Type{<:KA.Kernel}) = true
-
 import MOKA.MPASMesh
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Mesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.HorzMesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.VerticalMesh}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.PrimaryCells}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.DualCells}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Edges}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.ActiveLevels}) = true
-
-Enzyme.EnzymeRules.inactive_type(::Type{<:Clock}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:OneTimeAlarm}) = true
-Enzyme.EnzymeRules.inactive_type(::Type{<:PeriodicAlarm}) = true
 
 # %%
 function ocn_run_with_ad(config_fp, k, backend)
@@ -107,5 +93,10 @@ arch = KA.CPU()
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)
 
+println("AD vs FD comparison for cell $cell")
+@show (d_firstlayer_ad, d_firstlayer_fd)
+@show (d_firstvelocity_ad, d_firstvelocity_fd);
+
+# %%
 @test isapprox(d_firstlayer_ad, d_firstlayer_fd, atol=1e-4)
 @test isapprox(d_firstvelocity_ad, d_firstvelocity_fd, atol=1e-4)
