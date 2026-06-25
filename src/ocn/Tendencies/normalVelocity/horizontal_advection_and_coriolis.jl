@@ -40,9 +40,9 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
             maxLevelEdge.Top, 
             weightsOnEdge, 
             ndrange = nEdges)
-    # sync the backend 
-    KA.synchronize(backend)
-    
+    # No host KA.synchronize: redundant on a single CUDA stream, and its
+    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
+
     # pack the tendecy pack into the struct for further computation
     @pack! Tend = tendNormalVelocity
 end
@@ -59,17 +59,20 @@ end
     iEdge = @index(Global, Linear)
 
     @inbounds for i in 1:nEdgesOnEdge[iEdge]
-        
-        #if boundaryEdge[iEdge] != 0 continue end 
 
         @inbounds eoe = edgesOnEdge[i,iEdge]
-        
-        if eoe == 0 continue end 
 
-        @inbounds for k in 1:maxLevelEdgeTop[iEdge]
-            tendency[k,iEdge] += weightsOnEdge[i,iEdge] *
-                                 normalVelocity[k, eoe] *
-                                 fᵉ[eoe]
+        # Use a structured `if` rather than `if eoe == 0 continue end`. Under
+        # Enzyme reverse-mode the early-exit `continue` was not faithfully
+        # replayed, so the adjoint executed the body with eoe == 0 and scattered
+        # into normalVelocity[k, 0] — an out-of-bounds (index 0) write that
+        # triggered ERROR_ILLEGAL_ADDRESS. A structured branch differentiates correctly.
+        if eoe != 0
+            @inbounds for k in 1:maxLevelEdgeTop[iEdge]
+                tendency[k,iEdge] += weightsOnEdge[i,iEdge] *
+                                     normalVelocity[k, eoe] *
+                                     fᵉ[eoe]
+            end
         end
     end
-end 
+end

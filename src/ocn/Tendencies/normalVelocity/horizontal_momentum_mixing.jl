@@ -40,7 +40,8 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             maxLevelEdge.Top,
             ndrange=nEdges)
 
-    KA.synchronize(backend)
+    # No host KA.synchronize: redundant on a single CUDA stream, and its
+    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
 
     @pack! Tend = tendNormalVelocity
 end
@@ -52,7 +53,7 @@ end
                                                   @Const(verticesOnEdge),
                                                   @Const(dcEdge),
                                                   @Const(dvEdge),
-                                                  viscDel2,
+                                                  @Const(viscDel2),
                                                   @Const(boundaryEdge),
                                                   @Const(maxLevelEdgeTop))
 
@@ -68,7 +69,7 @@ end
         @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge]
 
         for k in 1:maxLevelEdgeTop[iEdge]
-            @inbounds tendency[k, iEdge] += viscDel2 * (
+            @inbounds tendency[k, iEdge] += viscDel2[1] * (
                 (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
                 (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
         end

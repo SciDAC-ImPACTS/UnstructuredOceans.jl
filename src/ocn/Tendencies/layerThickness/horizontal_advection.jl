@@ -32,9 +32,9 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
             areaCell, 
             ndrange=nCells)
 
-    # sync the backend 
-    KA.synchronize(backend)
-    
+    # No host KA.synchronize: redundant on a single CUDA stream, and its
+    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
+
     # pack the tendecy pack into the struct for further computation
     @pack! Tend = tendLayerThickness 
 end

@@ -26,8 +26,6 @@ end
                                      areaCell) #::Val{n}, where {n}
 
     iCell, k = @index(Global, NTuple)
-    #iCell = @index(Global, Linear)
-    #k = 1
 
     DivCell[k,iCell] = 0.0
 
@@ -51,12 +49,10 @@ function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=50)
     @unpack nCells, nEdgesOnCell = PrimaryCells
     @unpack edgesOnCell, edgeSignOnCell, areaCell = PrimaryCells
     
-    #nthreads = 50
     kernel1! = DivergenceOnCell_P1(backend, nthreads)
     kernel2! = DivergenceOnCell_P2(backend, nthreads)
     
     kernel1!(temp, VecEdge, dvEdge, nEdges, ndrange=(nEdges, nVertLevels))
-    #kernel1!(temp, VecEdge, dvEdge, nEdges, ndrange=nEdges)
     
     kernel2!(DivCell,
              temp,
@@ -66,9 +62,6 @@ function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=50)
              areaCell,
              #ndrange=nCells)
              ndrange=(nCells, nVertLevels))
-
-    KA.synchronize(backend)
-    
 end
 
 @doc raw"""
@@ -113,8 +106,6 @@ function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; workgroupsize=64)
             boundaryEdge,
             workgroupsize=workgroupsize,
             ndrange=(nEdges, nVertLevels))
-
-    KA.synchronize(backend)
 end
 
 @kernel function CurlOnVertex(CurlVertex,
@@ -167,9 +158,6 @@ function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh)
             vertexDegree,
             #ndrange=nVertices)
             ndrange=(nVertices, nVertLevels))
-           
-
-    KA.synchronize(backend)
 end
 
 function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh)
@@ -189,8 +177,6 @@ function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh)
             boundaryEdge,
             nEdges,
             ndrange=nEdges)
-
-    KA.synchronize(backend)
 end
 
 @kernel function interpolateCell2Edge(edgeValue,

@@ -98,8 +98,12 @@ end
     # edge-normal wind stress / rho projected onto edge normals [m^2 s^-2]
     windForcingEdge::FV
 
-    # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive
-    momentumDel2::Float64 = 0.0
+    # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive.
+    # Stored as a 1-element device array (not a bare Float64) so it can be passed
+    # to the mixing kernel as a Const array. A by-value Float64 kernel argument is
+    # classified Active by Enzyme under reverse-mode AD ("Active kernel arguments
+    # not supported on GPU"); an array sourced from the Const mesh is inactive.
+    momentumDel2::FV
 end
 
 ###
@@ -315,7 +319,8 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
           angleEdge = angleEdge,
           boundaryEdge = boundaryEdge,
           windForcingEdge = windForcingEdge,
-          momentumDel2 = momentumDel2)
+          # wrap scalar viscosity in a 1-element array (see Edges struct comment)
+          momentumDel2 = [momentumDel2])
 end
 
 function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
@@ -401,7 +406,7 @@ function Adapt.adapt_structure(to, edges::Edges)
                  angleEdge = Adapt.adapt(to, edges.angleEdge),
                  boundaryEdge = Adapt.adapt(to, edges.boundaryEdge),
                  windForcingEdge = Adapt.adapt(to, edges.windForcingEdge),
-                 momentumDel2 = edges.momentumDel2)
+                 momentumDel2 = Adapt.adapt(to, edges.momentumDel2))
 end
 
 function Adapt.adapt_structure(to, cells::PrimaryCells)
