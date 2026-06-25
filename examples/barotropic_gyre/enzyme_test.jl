@@ -87,8 +87,13 @@ cd(joinpath(@__DIR__, res))
 config_fn = "./enzyme_config.yml"
 
 cell = 5
-arch = KA.CPU()
-# arch = GPU()
+# arch = KA.CPU()
+arch = CUDABackend()
+
+# Enzyme reverse mode stores its per-thread tape in device-side malloc'd buffers;
+# the default ~8 MB CUDA heap overflows at model scale and faults with an illegal
+# memory access. Raise it before differentiating (no-op on CPU).
+# set_ad_device_heap!(arch)
 
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)
