@@ -27,6 +27,25 @@ device(a::GPU) = a.device
 
 device!(::CPU, i) = nothing
 
+"""
+    set_ad_device_heap!(arch; bytes)
+
+Raise the device-side dynamic-allocation (`malloc`) heap so that Enzyme
+reverse-mode AD has room for its tape.
+
+Enzyme's split reverse mode stores the per-thread tape in buffers obtained from
+the GPU's in-kernel `malloc`. The default device heap (~8 MB on CUDA) overflows
+once the differentiated kernels run at model scale (e.g. the coriolis tendency
+scatters over `nEdges × nEdgesOnEdge` entries); `malloc` then returns NULL and
+the augmented-forward kernel faults with an illegal memory access. Call this
+once, after selecting the backend and before `autodiff`. No-op on CPU and on
+backends that don't need it; the CUDA implementation lives in `MOKACUDAExt`.
+
+Returns the heap size in bytes that is in effect afterwards (or `nothing`).
+"""
+set_ad_device_heap!(arch; bytes::Integer = 512 * 1024 * 1024) = nothing
+set_ad_device_heap!(::CPU; bytes::Integer = 0) = nothing
+
 synchronize(::CPU) = KA.synchronize(KA.CPU())
 synchronize(a::AbstractArchitecture) = KA.synchronize(a.device)
 
