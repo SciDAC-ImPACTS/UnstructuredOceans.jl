@@ -24,19 +24,13 @@ function ocn_run_with_ad(config_fp, k, backend)
     d_Diag = Enzyme.make_zero(Diag)
     d_Tend = Enzyme.make_zero(Tend)
 
-    autodiff(Enzyme.Reverse,
-        ocn_run_loop,
-        Duplicated(sumGPU, d_sumGPU),
-        Duplicated(timestep, d_timestep),
-        Duplicated(Prog, d_Prog),
-        Duplicated(Diag, d_Diag),
-        Duplicated(Tend, d_Tend),
-        Const(Mesh),
-        Const(ForwardEuler),
-        Const(clock),
-        Const(simulationAlarm),
-        Const(outputAlarm),
-    )
+    # Checkpointed adjoint: differentiates one timestep at a time so Enzyme's
+    # per-step CUDA malloc-heap tape is freed between steps, instead of one
+    # autodiff over the whole loop (which overflows the heap past ~4 steps).
+    ocn_run_loop_checkpointed!(sumGPU, d_sumGPU, timestep, d_timestep,
+                               Prog, d_Prog, Diag, d_Diag, Tend, d_Tend,
+                               Mesh, ForwardEuler,
+                               clock, simulationAlarm, outputAlarm)
 
     @show d_Prog.normalVelocity[end][1:10]
     @show d_Prog.layerThickness[end][1:10]
@@ -93,7 +87,7 @@ arch = CUDABackend()
 # Enzyme reverse mode stores its per-thread tape in device-side malloc'd buffers;
 # the default ~8 MB CUDA heap overflows at model scale and faults with an illegal
 # memory access. Raise it before differentiating (no-op on CPU).
-# set_ad_device_heap!(arch)
+set_ad_device_heap!(arch)
 
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)

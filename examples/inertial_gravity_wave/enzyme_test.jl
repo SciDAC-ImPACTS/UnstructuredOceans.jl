@@ -6,22 +6,6 @@ using Enzyme
 using FiniteDifferences
 using MOKA
 
-# The Enzyme `inactive_type` guards for mesh / clock / alarm types now ship with
-# MOKA via the MOKAEnzymeExt package extension, which loads automatically here
-# because both MOKA and Enzyme are in scope. No need to declare them per-script.
-
-# Enzyme.autodiff does not support keyword arguments, so `backend` is positional here.
-# sumCPU is intentionally absent: see ocn_run_loop in run_loop.jl for the reason.
-# function ocn_run_loop_enzyme(
-#     sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler,
-#     clock, simulationAlarm, outputAlarm, backend
-# )
-#     ocn_run_loop(
-#         sumGPU, timestep, Prog, Diag, Tend, Mesh, ForwardEuler,
-#         clock, simulationAlarm, outputAlarm;
-#     )
-# end
-
 # Runs forward model with AD, and computes FD derivative approximations for comparison
 function ocn_run_with_ad(config_fp, k, backend)
 
@@ -51,27 +35,19 @@ function ocn_run_with_ad(config_fp, k, backend)
     d_Diag = Enzyme.make_zero(Diag)
     d_Tend = Enzyme.make_zero(Tend)
 
-    autodiff(Enzyme.Reverse,
-        ocn_run_loop,
-        Duplicated(sumGPU, d_sumGPU),
-        Duplicated(timestep, d_timestep),
-        Duplicated(Prog, d_Prog),
-        Duplicated(Diag, d_Diag),
-        Duplicated(Tend, d_Tend),
-        Const(Mesh),
-        Const(ForwardEuler),
-        Const(clock),
-        Const(simulationAlarm),
-        Const(outputAlarm),
-    )
+    # Checkpointed adjoint: differentiates one timestep at a time so Enzyme's
+    # per-step CUDA malloc-heap tape is freed between steps, instead of one
+    # autodiff over the whole loop (which overflows the heap past ~4 steps).
+    ocn_run_loop_checkpointed!(sumGPU, d_sumGPU, timestep, d_timestep,
+                               Prog, d_Prog, Diag, d_Diag, Tend, d_Tend,
+                               Mesh, ForwardEuler,
+                               clock, simulationAlarm, outputAlarm)
 
     @show d_Prog.normalVelocity[end][1:10]
     @show d_Prog.layerThickness[end][1:10]
-    # tendNormalVelocity / tendLayerThickness are 2D arrays (nVertLevels, n…),
-    # not time-level vectors like the Prog fields — slice the first level rather
-    # than indexing [end] (which would scalar-index the last element on the GPU).
-    @show d_Tend.tendNormalVelocity[1, 1:10]
-    @show d_Tend.tendLayerThickness[1, 1:10]
+    # NB: d_Tend / d_Diag are intermediate shadows that the checkpointed driver
+    # zeroes at the start of every reverse step, so they hold no meaningful value
+    # here — the differentiated quantities of interest are the d_Prog fields.
 
     #
     # Writing to outputs
@@ -130,10 +106,6 @@ end
 # %% Replace these with inertialgravity waves and a config file:
 res = "200km"
 cd(joinpath(@__DIR__, res))
-# Dedicated short-duration config for the gradient check: reverse-mode AD stores
-# a tape for every kernel of every timestep, so the differentiated horizon is
-# kept to a couple of steps. The full-length run uses ./config.yml (regenerated
-# from ../Moka.yaml by convergence.sh).
 config_fn = "./config_enzyme.yml"
 
 cell = 5
@@ -143,7 +115,7 @@ arch = CUDABackend()
 # Enzyme reverse mode stores its per-thread tape in device-side malloc'd buffers;
 # the default ~8 MB CUDA heap overflows at model scale and faults with an illegal
 # memory access. Raise it before differentiating (no-op on CPU).
-# set_ad_device_heap!(arch)
+set_ad_device_heap!(arch)
 
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)

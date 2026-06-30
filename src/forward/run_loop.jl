@@ -129,3 +129,34 @@ end
         sumGPU[1] = sumGPU[1] + array[j]*array[j]
     end
 end
+
+# Analytic cotangent seed for the loss sumGPU[1] = Σ_j ssh[j]^2 (see sumArray).
+# d(sumGPU[1])/d(ssh[j]) = 2*ssh[j], so with upstream cotangent d_sumGPU[1] the
+# seed is d_ssh[j] = 2*ssh[j]*d_sumGPU[1]. Used by the checkpointed adjoint driver
+# to seed the reverse sweep without differentiating the sum itself.
+@kernel function seed_ssh_cotangent!(d_ssh, ssh, d_sumGPU, arrayLength)
+    j = @index(Global, Linear)
+    if j < arrayLength + 1
+        @inbounds d_ssh[j] = 2 * ssh[j] * d_sumGPU[1]
+    end
+    @synchronize()
+end
+
+# Thin wrapper that differentiates a single timestep and returns `nothing`.
+# Enzyme's reverse rule is cleanest when the differentiated callable has a Const
+# (nothing) return — ocn_timestep's own last expression is a `@pack!`/diagnostic
+# call whose return activity is ambiguous. The checkpointed adjoint driver calls
+# `autodiff` on this wrapper, not on ocn_timestep directly.
+function _ad_timestep!(timestep, Prog, Diag, Tend, Mesh, integrator)
+    ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
+    return nothing
+end
+
+# Checkpointed reverse-mode AD driver. The single-`autodiff`-over-the-whole-loop
+# `ocn_run_loop` above keeps every timestep's Enzyme tape resident in the CUDA
+# in-kernel malloc heap until one reverse sweep at the end, overflowing the heap
+# past a few steps. This driver instead stores one state checkpoint per step and
+# differentiates a SINGLE timestep at a time, so each tape is freed before the
+# next step. The Enzyme-dependent method lives in MOKAEnzymeExt; this is the stub
+# so the name is exported and callable from `using MOKA` even without Enzyme.
+function ocn_run_loop_checkpointed! end

@@ -47,9 +47,9 @@ function VerticalMesh(mesh_fp, mesh; backend=KA.CPU())
     
     ds = NCDataset(mesh_fp, "r")
     
-    if uppercase(ds.attrib["is_periodic"]) != "YES"
-        @warn "Non-periodic mesh detected; solid-wall boundary conditions assumed."
-    end
+    # if uppercase(ds.attrib["is_periodic"]) != "YES"
+    #     @warn "Non-periodic mesh detected; solid-wall boundary conditions assumed."
+    # end
     
     nVertLevels = ds.dim["nVertLevels"]
     minLevelCell = ds["minLevelCell"][:]

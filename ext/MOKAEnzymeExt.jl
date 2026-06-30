@@ -41,4 +41,69 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:Clock})         = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:OneTimeAlarm})  = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:PeriodicAlarm}) = true
 
+# Checkpointed reverse-mode adjoint of the forward model. See the stub +
+# rationale in src/forward/run_loop.jl: differentiating the whole multi-timestep
+# loop in one `autodiff` call keeps every step's Enzyme tape resident in the CUDA
+# in-kernel malloc heap and overflows it past a handful of steps. Here we store
+# one state checkpoint per step on the forward sweep, then run the reverse sweep
+# one timestep at a time so each tape is freed between steps.
+#
+# The loss is sumGPU[1] = Σ ssh[end]² (MOKA.sumArray). Its gradient is seeded
+# analytically (MOKA.seed_ssh_cotangent!) rather than by differentiating the sum.
+# d_Prog is the running cotangent carried backward across steps and is NOT zeroed
+# between them; d_Diag/d_Tend ARE zeroed each step (Diag/Tend are recomputed fresh
+# every step, so their shadows must not accumulate stale contributions).
+function MOKA.ocn_run_loop_checkpointed!(sumGPU, d_sumGPU, timestep, d_timestep,
+                                         Prog, d_Prog, Diag, d_Diag, Tend, d_Tend,
+                                         Mesh, integrator,
+                                         clock, simulationAlarm, outputAlarm)
+    backend = KA.get_backend(Prog.ssh[end])
+
+    # --- Forward sweep: snapshot the entering state of each step, then advance.
+    # The checkpoint is Prog.{...}[end] as it stands BEFORE ocn_timestep; both
+    # integrators' first action is advance_time_levels! ([end] -> [end-1]), so
+    # restoring [end] alone reconstructs the exact input to the step.
+    checkpoints = NamedTuple[]
+    while !MOKA.isRinging(simulationAlarm)
+        MOKA.advance!(clock)
+        push!(checkpoints, (ssh            = copy(Prog.ssh[end]),
+                            normalVelocity = copy(Prog.normalVelocity[end]),
+                            layerThickness = copy(Prog.layerThickness[end])))
+        MOKA._ad_timestep!(timestep, Prog, Diag, Tend, Mesh, integrator)
+        if MOKA.isRinging(outputAlarm)
+            MOKA.reset!(outputAlarm)
+        end
+    end
+
+    # --- Loss value (for logging/inspection) from the final ssh.
+    n_ssh = length(Prog.ssh[end])
+    sumKernel! = MOKA.sumArray(backend, 1)
+    sumKernel!(sumGPU, Prog.ssh[end], n_ssh, ndrange=1)
+
+    # --- Seed the reverse sweep: d_Prog.ssh[end] = 2*ssh[end]*d_sumGPU.
+    seedKernel! = MOKA.seed_ssh_cotangent!(backend, 64)
+    seedKernel!(d_Prog.ssh[end], Prog.ssh[end], d_sumGPU, n_ssh, ndrange=n_ssh)
+
+    # --- Reverse sweep: one timestep at a time, newest to oldest.
+    for k in length(checkpoints):-1:1
+        cp = checkpoints[k]
+        Prog.ssh[end]            .= cp.ssh
+        Prog.normalVelocity[end] .= cp.normalVelocity
+        Prog.layerThickness[end] .= cp.layerThickness
+
+        Enzyme.make_zero!(d_Diag)
+        Enzyme.make_zero!(d_Tend)
+
+        autodiff(Enzyme.Reverse, MOKA._ad_timestep!,
+            Duplicated(timestep, d_timestep),
+            Duplicated(Prog, d_Prog),
+            Duplicated(Diag, d_Diag),
+            Duplicated(Tend, d_Tend),
+            Const(Mesh),
+            Const(integrator))
+    end
+
+    return nothing
+end
+
 end # module MOKAEnzymeExt
