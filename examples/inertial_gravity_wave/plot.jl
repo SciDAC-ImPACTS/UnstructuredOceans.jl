@@ -11,18 +11,18 @@ using Printf
 """
 Struct to compute the exact solution for the inertial gravity wave test case.
 """
-struct ExactSolution
-    angleEdge :: Vector{Float64}
-    xCell     :: Vector{Float64}
-    yCell     :: Vector{Float64}
-    xEdge     :: Vector{Float64}
-    yEdge     :: Vector{Float64}
-    f0        :: Float64
-    eta0      :: Float64
-    g         :: Float64
-    kx        :: Float64
-    ky        :: Float64
-    omega     :: Float64
+struct ExactSolution{T}
+    angleEdge :: Vector{T}
+    xCell     :: Vector{T}
+    yCell     :: Vector{T}
+    xEdge     :: Vector{T}
+    yEdge     :: Vector{T}
+    f0        :: T
+    eta0      :: T
+    g         :: T
+    kx        :: T
+    ky        :: T
+    omega     :: T
 end
 
 """
@@ -50,7 +50,9 @@ function ExactSolution(ds::NCDataset)
     ky    = npy * 2.0 * π / (ly * 1e3)
     omega = sqrt(f0^2 + g * bottom_depth * (kx^2 + ky^2))
 
-    return ExactSolution(angleEdge, 
+    T = promote_type(eltype(angleEdge), eltype(xCell), eltype(yCell), eltype(xEdge), eltype(yEdge), Float64)
+
+    return ExactSolution{T}(angleEdge, 
     xCell, yCell, xEdge, yEdge,
                          f0, eta0, g, kx, ky, omega)
 end
@@ -309,7 +311,7 @@ end
 # res_dirs = ["40km", "20km", "10km"]
 
 # for dir_ in reverse(res_dirs)
-res = "200km"
+res = "100km"
 dir_ = joinpath(@__DIR__, res)
 mesh_fp = joinpath(dir_, "initial_state.nc")
 out_fp = joinpath(dir_, "output.nc")

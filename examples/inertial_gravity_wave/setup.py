@@ -15,8 +15,8 @@ from polaris.ocean.vertical import init_vertical_coord
 
 # Physics parameters (from config.cfg defaults)
 F_0       = 1e-4     # Coriolis parameter [s⁻¹]
-G         = 9.80665  # standard gravity [m s⁻²]
-ETA_0     = 1.0      # SSH amplitude [m]
+G         = 9.80616  # gravity [m s⁻²] — must match the model (pressure_gradient.jl) and compare.jl exact solution
+ETA_0     = 0.01      # SSH amplitude [m]
 H         = 1000.0   # resting depth [m]
 LX        = 10000.0  # domain width [km]
 N_WAVES_X = 2        # number of wavelengths in x

@@ -20,7 +20,7 @@ omega:
     config_explicit_proc_decomp: false
     config_proc_decomp_file_prefix: graph.info.part.
   time_integration:
-    config_dt: 0000_00:05:00
+    config_dt: 0000_00:08:00
     config_time_integrator: RK4
     config_number_of_time_levels: 2
   streams:

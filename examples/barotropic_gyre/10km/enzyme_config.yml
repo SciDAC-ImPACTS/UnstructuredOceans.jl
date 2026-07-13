@@ -6,7 +6,7 @@ omega:
     config_restart_timestamp_name: Restart_timestamp
     config_start_time: 0001-01-01_00:00:00
     config_stop_time: none
-    config_run_duration: 0000_00:20:00
+    config_run_duration: 0000_10:00:00
     config_calendar_type: noleap
     config_output_reference_time: 0001-01-01_00:00:00
   io:
@@ -20,7 +20,7 @@ omega:
     config_explicit_proc_decomp: false
     config_proc_decomp_file_prefix: graph.info.part.
   time_integration:
-    config_dt: 0000_00:00:01
+    config_dt: 0000_00:00:40
     config_time_integrator: RungeKutta4
     config_number_of_time_levels: 2
   forcing:
@@ -51,7 +51,7 @@ omega:
       reference_time: 0001-01-01_00:00:00
       clobber_mode: truncate
       input_interval: initial_only
-      output_interval: 0365_00:00:00
+      output_interval: 0000_01:00:00
     output:
       type: output
       filename_template: output_enzyme.nc
