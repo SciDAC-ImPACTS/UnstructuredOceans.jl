@@ -25,15 +25,18 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 [weakdeps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
+Checkpointing = "eb46d486-4f9c-4c3d-b445-a617f2a2f1ca"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 
 [extensions]
 MOKACUDAExt = "CUDA"
+MOKACheckpointingExt = ["Checkpointing", "Enzyme"]
 MOKAEnzymeExt = "Enzyme"
 
 [compat]
 CUDA = "5, 6"
 CUDACore = "6.2.0"
+Checkpointing = "0.12"
 Enzyme = "0.13"
 GPUArraysCore = "0.2"
 Printf = "1.11.0"

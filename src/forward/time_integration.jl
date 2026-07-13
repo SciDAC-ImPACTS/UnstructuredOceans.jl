@@ -85,9 +85,14 @@ function ocn_timestep(dt,
 
     advance_time_levels!(Prog)
 
-    # RK4 coefficients: substep sizes and accumulation weights
-    a = [dt/2., dt/2., dt]
-    b = [dt/6., dt/3., dt/3., dt/6.]
+    # RK4 substep fractions of dt (a) and accumulation weights (b). These are pure
+    # HOST Float64 constants; `dt` stays a device array so the update kernels read
+    # dt[1] on-device — mirroring forward_euler_step!. Building host coefficient
+    # arrays out of the device `dt` instead (e.g. a = [dt/2, dt/2, dt]) and using
+    # them in fused broadcasts forces a host↔device copy (cuMemcpyHtoDAsync) that
+    # Enzyme's reverse mode cannot differentiate ("unsupported gc-transition tag").
+    a = (0.5, 0.5, 1.0)
+    b = (1.0/6.0, 1.0/3.0, 1.0/3.0, 1.0/6.0)
 
     # After advance_time_levels!, both [end-1] and [end] hold y_n.
     # [end-1] is the read-only current state; [end] is scratch for substeps.
@@ -96,14 +101,26 @@ function ocn_timestep(dt,
 
     @unpack ssh, normalVelocity, layerThickness = Prog
 
-    # Accumulators start at y_n; each stage adds b[k]*k_i so the final
-    # value is y_{n+1} = y_n + dt/6*(k1 + 2k2 + 2k3 + k4).
-    normalVelocityNew   = copy(normalVelocity[end-1])
-    layerThicknessNew   = copy(layerThickness[end-1])
-
-    nthreads   = 50
-    ssh_kernel! = update_sea_surface_height!(backend, nthreads)
+    nthreads    = 50
+    nEdges      = Mesh.HorzMesh.Edges.nEdges
+    nCells      = Mesh.HorzMesh.PrimaryCells.nCells
     ssh_length  = length(ssh[end])
+
+    substep!    = rk4_substep!(backend, nthreads)
+    accumulate! = rk4_accumulate!(backend, nthreads)
+    copy!       = rk4_copy!(backend, nthreads)
+    ssh_kernel! = update_sea_surface_height!(backend, nthreads)
+
+    # Accumulators start at y_n; each stage adds b[k]*dt*k_i so the final value is
+    # y_{n+1} = y_n + dt/6*(k1 + 2k2 + 2k3 + k4). Kept as their own device arrays so
+    # the substep scratch in normalVelocity[end] doesn't clobber them. Filled with a
+    # device kernel (not Base.copy) because Enzyme reverse-mode lowers the generic
+    # copyto! through a host staging buffer (cuMemcpyHtoDAsync), which it then cannot
+    # differentiate (unsupported gc-transition tag).
+    normalVelocityNew   = similar(normalVelocityCurr)
+    layerThicknessNew   = similar(layerThicknessCurr)
+    copy!(normalVelocityNew, normalVelocityCurr, nEdges, ndrange=nEdges)
+    copy!(layerThicknessNew, layerThicknessCurr, nCells, ndrange=nCells)
 
     diagnostic_compute!(Mesh, Diag, Prog)
 
@@ -114,23 +131,54 @@ function ocn_timestep(dt,
         @unpack tendNormalVelocity, tendLayerThickness = Tend
 
         if RK_step < 4
-            normalVelocity[end] .= normalVelocityCurr .+ a[RK_step] .* tendNormalVelocity
-            layerThickness[end] .= layerThicknessCurr .+ a[RK_step] .* tendLayerThickness
+            substep!(normalVelocity[end], normalVelocityCurr, tendNormalVelocity, dt, nEdges, Val(a[RK_step]), ndrange=nEdges)
+            substep!(layerThickness[end], layerThicknessCurr, tendLayerThickness, dt, nCells, Val(a[RK_step]), ndrange=nCells)
             ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
             diagnostic_compute!(Mesh, Diag, Prog)
         end
 
-        normalVelocityNew .+= b[RK_step] .* tendNormalVelocity
-        layerThicknessNew .+= b[RK_step] .* tendLayerThickness
+        accumulate!(normalVelocityNew, tendNormalVelocity, dt, nEdges, Val(b[RK_step]), ndrange=nEdges)
+        accumulate!(layerThicknessNew, tendLayerThickness, dt, nCells, Val(b[RK_step]), ndrange=nCells)
     end
 
-    normalVelocity[end] .= normalVelocityNew
-    layerThickness[end] .= layerThicknessNew
+    copy!(normalVelocity[end], normalVelocityNew, nEdges, ndrange=nEdges)
+    copy!(layerThickness[end], layerThicknessNew, nCells, ndrange=nCells)
     ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
 
     @pack! Prog = ssh, normalVelocity, layerThickness
 
     diagnostic_compute!(Mesh, Diag, Prog)
+end
+
+# RK4 substep: out[1,j] = base[1,j] + A*dt[1]*tend[1,j]. The stage fraction `A` is a
+# COMPILE-TIME constant carried as a `Val` type parameter, not a runtime scalar arg:
+# Enzyme's KernelAbstractions reverse rule rejects active Float64 kernel arguments
+# ("Active kernel arguments not supported on GPU"), so — like forward_euler_step! —
+# the only numeric runtime arg is `dt`, a length-1 device array read on-device.
+@kernel function rk4_substep!(out, base, tend, dt, arrayLength, ::Val{A}) where {A}
+    j = @index(Global, Linear)
+    if j < arrayLength + 1
+        @inbounds out[1, j] = base[1, j] + A * dt[1] * tend[1, j]
+    end
+    @synchronize()
+end
+
+# RK4 accumulation: acc[1,j] += B*dt[1]*tend[1,j]; weight `B` is a compile-time Val.
+@kernel function rk4_accumulate!(acc, tend, dt, arrayLength, ::Val{B}) where {B}
+    j = @index(Global, Linear)
+    if j < arrayLength + 1
+        @inbounds acc[1, j] = acc[1, j] + B * dt[1] * tend[1, j]
+    end
+    @synchronize()
+end
+
+# Copy of the accumulated y_{n+1} back into the [end] time level: dst[1,j] = src[1,j].
+@kernel function rk4_copy!(dst, src, arrayLength)
+    j = @index(Global, Linear)
+    if j < arrayLength + 1
+        @inbounds dst[1, j] = src[1, j]
+    end
+    @synchronize()
 end
 
 function ocn_timestep(timestep,

@@ -4,7 +4,6 @@ import Adapt
 #using MPAS_O: GlobalConfig, Mesh, ConfigGet, NCDataset
 
 mutable struct PrognosticVars{F<:AbstractFloat, FV1 <: AbstractArray{F,1}, FV2 <: AbstractArray{F,2}, VFV1 <: AbstractVector{FV1}, VFV2 <: AbstractVector{FV2}}
-
     # var: sea surface height [m] 
     # dim: (nCells, Time)
     ssh::VFV1
@@ -16,15 +15,6 @@ mutable struct PrognosticVars{F<:AbstractFloat, FV1 <: AbstractArray{F,1}, FV2 <
     # var: layer thickness [m]
     # dim: (nVertLevels, nCells, Time)
     layerThickness::VFV2
-
-    ## var: potential temperature [deg C]
-    ## dim: (nVertLevels, nCells, Time)
-    #temperature::Array{F,3} = zeros(F, nVertLevels, nCells, nTimeLevels)
-
-    ## var: salinity [g salt per kg seawater]
-    ## dim: (nVertLevels, nCells, Time)
-    #salinity::Array{F,3} = zeros(F, nVertLevels, nCells, nTimeLevels)
-    
     function PrognosticVars(ssh::AT1D,
                             normalVelocity::AT2D,
                             layerThickness::AT2D,
@@ -67,9 +57,6 @@ function PrognosticVars(config::GlobalConfig, mesh::Mesh; backend=KA.CPU())
         inputConfig = ConfigGet(config.streams, "input")
         input_filename = ConfigGet(inputConfig, "filename_template")
     end 
-    # would be usefull to have option here for prescribed field for 
-    # unit testing. That way a mesh file wouldn't be needed to be 
-    # created to set the spatial operators 
     
     # Read the number of desired time levels from the config file 
     timeIntegrationConfig = ConfigGet(config.namelist, "time_integration")
@@ -106,8 +93,8 @@ function PrognosticVars(config::GlobalConfig, mesh::Mesh; backend=KA.CPU())
 end
 
 function Adapt.adapt_structure(to, x::PrognosticVars)
-    return PrognosticVars(Adapt.adapt(to, x.ssh[1]),
-                          Adapt.adapt(to, x.normalVelocity[1]), 
-                          Adapt.adapt(to, x.layerThickness[1]),
+    return PrognosticVars(Adapt.adapt(to, x.ssh[end]),
+                          Adapt.adapt(to, x.normalVelocity[end]),
+                          Adapt.adapt(to, x.layerThickness[end]),
                           length(x.ssh))
 end

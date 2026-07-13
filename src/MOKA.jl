@@ -1,6 +1,6 @@
 module MOKA
 
-    export ocn_run_loop, ocn_run_loop_checkpointed!, ocn_init, ocn_init_shadows, ocn_init_alarms, isRinging, advance!, ocn_timestep, changeTimeStep!, reset!
+    export ocn_run_loop, ocn_run_loop_checkpointed!, ocn_loss, OceanModel, ocn_step!, ocn_init, ocn_init_shadows, ocn_init_alarms, isRinging, advance!, ocn_timestep, changeTimeStep!, reset!
     export RungeKutta4, ForwardEuler, parse_integrator
     export write_netcdf, io_initialize, io_writeTimestep, io_finalize
     export Clock, OneTimeAlarm, PeriodicAlarm
