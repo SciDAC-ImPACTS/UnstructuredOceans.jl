@@ -18,7 +18,7 @@ module MOKA
     # Architectures
     export CPU, GPU, AbstractArchitecture, AbstractSerialArchitecture,
            device, architecture, array_type, on_architecture,
-           set_ad_device_heap!
+           set_ad_device_heap!, DEFAULT_NTHREADS
 
     using Dates, Printf, YAML, NCDatasets, UnPack, Statistics, Logging, KernelAbstractions
 

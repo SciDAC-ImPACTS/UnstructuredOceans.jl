@@ -26,10 +26,8 @@ end
 using GPUArraysCore: @allowscalar
 using KernelAbstractions
 
-function advance_time_levels!(Prog::PrognosticVars)
+function advance_time_levels!(Prog::PrognosticVars; nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(first(Prog.ssh))
-
-    nthreads = 100
 
     kernel2d! = advance_2d_array(backend, nthreads)
     kernel3d! = advance_3d_array(backend, nthreads)
@@ -80,10 +78,11 @@ function ocn_timestep(dt,
                       Diag::DiagnosticVars,
                       Tend::TendencyVars,
                       Mesh::Mesh,
-                      ::Type{RungeKutta4})
+                      ::Type{RungeKutta4};
+                      nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
-    advance_time_levels!(Prog)
+    advance_time_levels!(Prog; nthreads=nthreads)
 
     # RK4 substep fractions of dt (a) and accumulation weights (b). These are pure
     # HOST Float64 constants; `dt` stays a device array so the update kernels read
@@ -101,7 +100,6 @@ function ocn_timestep(dt,
 
     @unpack ssh, normalVelocity, layerThickness = Prog
 
-    nthreads    = 50
     nEdges      = Mesh.HorzMesh.Edges.nEdges
     nCells      = Mesh.HorzMesh.PrimaryCells.nCells
     ssh_length  = length(ssh[end])
@@ -122,11 +120,11 @@ function ocn_timestep(dt,
     copy!(normalVelocityNew, normalVelocityCurr, nEdges, ndrange=nEdges)
     copy!(layerThicknessNew, layerThicknessCurr, nCells, ndrange=nCells)
 
-    diagnostic_compute!(Mesh, Diag, Prog)
+    diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     for RK_step in 1:4
-        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
-        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
+        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
+        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
         @unpack tendNormalVelocity, tendLayerThickness = Tend
 
@@ -134,7 +132,7 @@ function ocn_timestep(dt,
             substep!(normalVelocity[end], normalVelocityCurr, tendNormalVelocity, dt, nEdges, Val(a[RK_step]), ndrange=nEdges)
             substep!(layerThickness[end], layerThicknessCurr, tendLayerThickness, dt, nCells, Val(a[RK_step]), ndrange=nCells)
             ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
-            diagnostic_compute!(Mesh, Diag, Prog)
+            diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
         end
 
         accumulate!(normalVelocityNew, tendNormalVelocity, dt, nEdges, Val(b[RK_step]), ndrange=nEdges)
@@ -147,7 +145,7 @@ function ocn_timestep(dt,
 
     @pack! Prog = ssh, normalVelocity, layerThickness
 
-    diagnostic_compute!(Mesh, Diag, Prog)
+    diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 end
 
 # RK4 substep: out[1,j] = base[1,j] + A*dt[1]*tend[1,j]. The stage fraction `A` is a
@@ -186,26 +184,26 @@ function ocn_timestep(timestep,
                       Diag::DiagnosticVars,
                       Tend::TendencyVars,
                       Mesh::Mesh,
-                      ::Type{ForwardEuler})
+                      ::Type{ForwardEuler};
+                      nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
     # advance the timelevels within the state strcut
-    advance_time_levels!(Prog)
+    advance_time_levels!(Prog; nthreads=nthreads)
 
     # unpack the state variable arrays
     @unpack ssh, normalVelocity, layerThickness = Prog
 
     # compute the diagnostics
-    diagnostic_compute!(Mesh, Diag, Prog)
+    diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     # compute normalVelocity tenedency
-    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
+    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
     # compute layerThickness tendency
-    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
+    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
     # update the state variables by the tendencies
-    nthreads = 50
     tendKernel! = forward_euler_step!(backend, nthreads)
 
     tendKernel!(normalVelocity[end], Tend.tendNormalVelocity, timestep, Mesh.HorzMesh.Edges.nEdges, ndrange=Mesh.HorzMesh.Edges.nEdges)

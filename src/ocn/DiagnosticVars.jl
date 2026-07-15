@@ -107,13 +107,14 @@ end
 
 function diagnostic_compute!(Mesh::Mesh,
                              Diag::DiagnosticVars,
-                             Prog::PrognosticVars)
+                             Prog::PrognosticVars;
+                             nthreads=DEFAULT_NTHREADS)
 
-    calculate_thicknessFlux!(Diag, Prog, Mesh)
-    calculate_velocityDivCell!(Diag, Prog, Mesh)
-    calculate_relativeVorticity!(Diag, Prog, Mesh)
-    calculate_layerThicknessEdge!(Diag, Prog, Mesh)
-end 
+    calculate_thicknessFlux!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_velocityDivCell!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_relativeVorticity!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_layerThicknessEdge!(Diag, Prog, Mesh; nthreads=nthreads)
+end
 
 #= Preformance Note:
    -----------------------------------------------------------------------
@@ -124,28 +125,29 @@ end
 
 function calculate_layerThicknessEdge!(Diag::DiagnosticVars,
                                        Prog::PrognosticVars,
-                                       Mesh::Mesh)
+                                       Mesh::Mesh;
+                                       nthreads=DEFAULT_NTHREADS)
 
     #layerThickness = Prog.layerThickness[:,:,end]
     @unpack layerThicknessEdge = Diag
 
     interpolateCell2Edge!(layerThicknessEdge,
                           Prog.layerThickness[end],
-                          Mesh)
+                          Mesh; nthreads=nthreads)
 
     @pack! Diag = layerThicknessEdge
 end 
 
 function calculate_thicknessFlux!(Diag::DiagnosticVars,
                                   Prog::PrognosticVars,
-                                  Mesh::Mesh)
+                                  Mesh::Mesh;
+                                  nthreads=DEFAULT_NTHREADS)
 
     backend = KA.get_backend(Diag.thicknessFlux)
-    
+
     normalVelocity = Prog.normalVelocity[end]
     @unpack thicknessFlux, layerThicknessEdge = Diag
 
-    nthreads = 100
     kernel!  = compute_thicknessFlux!(backend, nthreads)
 
     kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, size(normalVelocity)[2], ndrange=size(normalVelocity)[2])
@@ -168,23 +170,25 @@ end
 
 function calculate_velocityDivCell!(Diag::DiagnosticVars,
                                     Prog::PrognosticVars,
-                                    Mesh::Mesh)
+                                    Mesh::Mesh;
+                                    nthreads=DEFAULT_NTHREADS)
 
     normalVelocity = Prog.normalVelocity[end]
     @unpack velocityDivCell, layerThicknessEdge = Diag
 
-    DivergenceOnCell!(velocityDivCell, normalVelocity, layerThicknessEdge, Mesh)
+    DivergenceOnCell!(velocityDivCell, normalVelocity, layerThicknessEdge, Mesh; nthreads=nthreads)
 
     @pack! Diag = velocityDivCell
 end
 
 function calculate_relativeVorticity!(Diag::DiagnosticVars,
                                       Prog::PrognosticVars,
-                                      Mesh::Mesh)
+                                      Mesh::Mesh;
+                                      nthreads=DEFAULT_NTHREADS)
 
     @unpack relativeVorticity = Diag
 
-    CurlOnVertex!(relativeVorticity, Prog.normalVelocity[end], Mesh)
+    CurlOnVertex!(relativeVorticity, Prog.normalVelocity[end], Mesh; nthreads=nthreads)
 
     @pack! Diag = relativeVorticity
 end

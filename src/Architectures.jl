@@ -1,6 +1,14 @@
 import Adapt
 import KernelAbstractions as KA
 
+# Default KernelAbstractions workgroup size (threads per group) for every compute
+# kernel launch. 64 is a warp/wavefront multiple (2× NVIDIA's 32, an even divisor of
+# AMD's 64), so no lanes sit idle — unlike the historical 50, which left 14 dead lanes
+# in the second 32-wide warp. Every kernel-launching function takes an `nthreads`
+# keyword defaulting to this, so it can be tuned per call/architecture without editing
+# the launch sites. See the benchmark rationale in kernel_benchmark.jl.
+const DEFAULT_NTHREADS = 64
+
 abstract type AbstractArchitecture end
 abstract type AbstractSerialArchitecture <: AbstractArchitecture end
 

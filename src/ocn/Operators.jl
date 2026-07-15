@@ -39,7 +39,7 @@ end
     @synchronize()
 end
 
-function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=50)
+function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(DivCell)
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
@@ -89,7 +89,7 @@ end
     @synchronize()
 end
 
-function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; workgroupsize=64)
+function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; workgroupsize=DEFAULT_NTHREADS)
     backend = KA.get_backend(grad)
     @unpack HorzMesh, VertMesh = Mesh
 
@@ -135,18 +135,17 @@ end
     @synchronize()
 end
 
-function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh)
+function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(CurlVertex)
-    @unpack HorzMesh, VertMesh = Mesh    
+    @unpack HorzMesh, VertMesh = Mesh
 
-    @unpack nVertLevels, maxLevelVertex = VertMesh 
+    @unpack nVertLevels, maxLevelVertex = VertMesh
     @unpack DualCells, Edges = HorzMesh
 
     @unpack nEdges, dcEdge = Edges
     @unpack nVertices, vertexDegree = DualCells
     @unpack areaTriangle, edgeSignOnVertex, edgesOnVertex = DualCells
 
-    nthreads = 50
     kernel!  = CurlOnVertex(backend, nthreads)
     
     kernel!(CurlVertex,
@@ -160,7 +159,7 @@ function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh)
             ndrange=(nVertices, nVertLevels))
 end
 
-function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh)
+function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(edgeValue)
     @unpack HorzMesh, VertMesh = Mesh
     @unpack Edges = HorzMesh
@@ -168,7 +167,6 @@ function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh)
     @unpack nVertLevels = VertMesh
     @unpack nEdges, cellsOnEdge, boundaryEdge = Edges
 
-    nthreads = 50
     kernel!  = interpolateCell2Edge(backend, nthreads)
 
     kernel!(edgeValue,

@@ -11,7 +11,8 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
                                      Prog::PrognosticVars,
                                      Diag::DiagnosticVars,
                                      Mesh::Mesh,
-                                     ::Type{sshGradient})
+                                     ::Type{sshGradient};
+                                     nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
@@ -23,7 +24,6 @@ function pressure_gradient_tendency!(Tend::TendencyVars,
     ssh = Prog.ssh[end]
     @unpack tendNormalVelocity = Tend
 
-    nthreads = 50
     kernel! = SSHGradOnEdge!(backend, nthreads)
     kernel!(tendNormalVelocity,
             ssh,

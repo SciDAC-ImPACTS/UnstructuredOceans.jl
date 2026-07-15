@@ -1,6 +1,7 @@
 function wind_forcing_tendency!(Tend::TendencyVars,
                                 Diag::DiagnosticVars,
-                                Mesh::Mesh)
+                                Mesh::Mesh;
+                                nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
@@ -10,7 +11,6 @@ function wind_forcing_tendency!(Tend::TendencyVars,
     @unpack layerThicknessEdge = Diag
     @unpack tendNormalVelocity = Tend
 
-    nthreads = 50
     kernel! = wind_forcing_kernel!(backend, nthreads)
     kernel!(tendNormalVelocity,
             windForcingEdge,

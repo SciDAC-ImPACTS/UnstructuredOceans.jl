@@ -13,7 +13,8 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
                                                      Prog::PrognosticVars,
                                                      Diag::DiagnosticVars,
                                                      Mesh::Mesh,
-                                                     ::Type{linearCoriolis})
+                                                     ::Type{linearCoriolis};
+                                                     nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh    
@@ -28,8 +29,9 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
     # unpack the normal velocity tendency term
     @unpack tendNormalVelocity = Tend 
     
-    # initialize the kernel
-    nthreads = 50
+    # initialize the kernel. Workgroup size defaults to DEFAULT_NTHREADS (a warp
+    # multiple, 64) so no lanes sit idle: 50 spanned two 32-wide warps with 14 dead
+    # lanes (~22% waste). Overridable via the `nthreads` keyword.
     kernel!  = coriolis_force_tendency_kernel!(backend, nthreads)
     # use kernel to compute coriolis and horizontal advection
     kernel!(tendNormalVelocity,
@@ -48,19 +50,27 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
 end
 
 @kernel function coriolis_force_tendency_kernel!(tendency,
-                                                 normalVelocity,
-                                                 fᵉ,
-                                                 nEdgesOnEdge,
-                                                 edgesOnEdge,
-                                                 maxLevelEdgeTop,
-                                                 weightsOnEdge)
+                                                 @Const(normalVelocity),
+                                                 @Const(fᵉ),
+                                                 @Const(nEdgesOnEdge),
+                                                 @Const(edgesOnEdge),
+                                                 @Const(maxLevelEdgeTop),
+                                                 @Const(weightsOnEdge))
     
     # global indices over nEdges
     iEdge = @index(Global, Linear)
 
+    # maxLevelEdgeTop[iEdge] is invariant across the neighbour loop — load it once.
+    @inbounds nLevels = maxLevelEdgeTop[iEdge]
+
+    # edgesOnEdge / weightsOnEdge are stored EDGE-MAJOR ([iEdge, i]) so that, with the
+    # thread index iEdge as the leading (unit-stride) dimension, a warp's reads of a
+    # fixed neighbour i are contiguous and coalesce into few cache lines (see the layout
+    # note in readEdgeInfo). Indexing them [i, iEdge] here would reintroduce the strided,
+    # L2-spilling access that made this kernel scale super-linearly on the GPU.
     @inbounds for i in 1:nEdgesOnEdge[iEdge]
 
-        @inbounds eoe = edgesOnEdge[i,iEdge]
+        @inbounds eoe = edgesOnEdge[iEdge,i]
 
         # Use a structured `if` rather than `if eoe == 0 continue end`. Under
         # Enzyme reverse-mode the early-exit `continue` was not faithfully
@@ -68,10 +78,13 @@ end
         # into normalVelocity[k, 0] — an out-of-bounds (index 0) write that
         # triggered ERROR_ILLEGAL_ADDRESS. A structured branch differentiates correctly.
         if eoe != 0
-            @inbounds for k in 1:maxLevelEdgeTop[iEdge]
-                tendency[k,iEdge] += weightsOnEdge[i,iEdge] *
-                                     normalVelocity[k, eoe] *
-                                     fᵉ[eoe]
+            # weightsOnEdge[iEdge,i] and fᵉ[eoe] are both invariant in k: fold them
+            # into one per-neighbour coefficient outside the vertical loop so each
+            # level does a single load (normalVelocity) + FMA instead of two loads
+            # and two multiplies.
+            @inbounds coef = weightsOnEdge[iEdge,i] * fᵉ[eoe]
+            @inbounds for k in 1:nLevels
+                tendency[k,iEdge] += coef * normalVelocity[k, eoe]
             end
         end
     end

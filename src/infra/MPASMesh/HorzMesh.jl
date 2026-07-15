@@ -278,9 +278,15 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
     cellsOnEdge = ds["cellsOnEdge"][:,:]
     verticesOnEdge = ds["verticesOnEdge"][:,:]
 
-    # inter connectivity
-    edgesOnEdge = ds["edgesOnEdge"][:,:]
-    weightsOnEdge = ds["weightsOnEdge"][:,:]
+    # inter connectivity. Stored EDGE-MAJOR ([nEdges, maxEdges2]) — transposed from
+    # the file's [maxEdges2, nEdges] — so the coriolis/advection kernel, whose threads
+    # map to iEdge, reads neighbour data with a coalesced (unit-stride across a warp)
+    # pattern. The file layout made consecutive threads stride maxEdges2 apart, which is
+    # uncoalesced and becomes DRAM-bandwidth-bound once these arrays spill the L2 cache
+    # at high resolution (the source of that kernel's super-linear GPU scaling). This is
+    # the only consumer of their 2-D layout, so the transpose is local to this kernel.
+    edgesOnEdge = permutedims(ds["edgesOnEdge"][:,:])
+    weightsOnEdge = permutedims(ds["weightsOnEdge"][:,:])
 
     dvEdge = ds["dvEdge"][:]
     dcEdge = ds["dcEdge"][:]
