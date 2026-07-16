@@ -13,6 +13,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
                                               Diag::DiagnosticVars,
                                               Mesh::Mesh,
                                               ::Type{Del2};
+                                              viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                                               nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendNormalVelocity)
 
@@ -22,7 +23,6 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
     @unpack maxLevelEdge = VertMesh
     @unpack nEdges, dcEdge, dvEdge = Edges
     @unpack cellsOnEdge, verticesOnEdge, boundaryEdge = Edges
-    viscDel2 = Edges.momentumDel2
 
     @unpack tendNormalVelocity = Tend
     @unpack velocityDivCell, relativeVorticity = Diag
@@ -53,7 +53,7 @@ end
                                                   @Const(verticesOnEdge),
                                                   @Const(dcEdge),
                                                   @Const(dvEdge),
-                                                  @Const(viscDel2),
+                                                  viscDel2,
                                                   @Const(boundaryEdge),
                                                   @Const(maxLevelEdgeTop))
 

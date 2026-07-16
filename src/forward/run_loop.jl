@@ -130,6 +130,21 @@ end
     end
 end
 
+# Forward-mode AD variant. Advances the model `nsteps` fixed-size steps, threading
+# the viscosity `viscDel2` (a length-1 device array) explicitly into every
+# `ocn_timestep` so Enzyme forward mode can carry its tangent through the run. On
+# return, the state in `Prog` has been advanced; when this is called under
+# `autodiff(Forward, ...)` with `viscDel2` as a `Duplicated`, the shadow of `Prog`
+# holds ∂(final state)/∂(viscosity) directly — forward mode needs no scalar loss,
+# tape, or checkpointing (so no CUDA heap blowup). Mesh is passed directly to keep
+# ModelSetup out of the differentiated scope (see the reverse-mode loop above).
+function ocn_run_loop_fwd!(viscDel2, timestep, Prog, Diag, Tend, Mesh, integrator, nsteps::Int)
+    for _ in 1:nsteps
+        ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator; viscDel2=viscDel2)
+    end
+    return nothing
+end
+
 # Bundle of all state advanced by the forward model, packaged as a single mutable struct so it can be checkpointed by Checkpointing.jl.
 mutable struct OceanModel{TS<:timeStepper, P, D, T, M, V}
     Prog::P

@@ -17,6 +17,7 @@ function computeNormalVelocityTendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
                                         Diag::DiagnosticVars,
                                         Mesh::Mesh;
+                                        viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                                         nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Tend.tendNormalVelocity)
     kernel! = ZeroOutVector!(backend, nthreads)
@@ -29,7 +30,7 @@ function computeNormalVelocityTendency!(Tend::TendencyVars,
         Tend, Prog, Diag, Mesh, linearCoriolis; nthreads=nthreads)
 
     horizontal_momentum_mixing_tendency!(
-        Tend, Prog, Diag, Mesh, Del2; nthreads=nthreads)
+        Tend, Prog, Diag, Mesh, Del2; viscDel2=viscDel2, nthreads=nthreads)
 
     wind_forcing_tendency!(
         Tend, Diag, Mesh; nthreads=nthreads)

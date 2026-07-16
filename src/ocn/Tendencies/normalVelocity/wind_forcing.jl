@@ -17,8 +17,6 @@ function wind_forcing_tendency!(Tend::TendencyVars,
             layerThicknessEdge,
             boundaryEdge,
             ndrange=nEdges)
-    # No host KA.synchronize: redundant on a single CUDA stream, and its
-    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
 
     @pack! Tend = tendNormalVelocity
 end

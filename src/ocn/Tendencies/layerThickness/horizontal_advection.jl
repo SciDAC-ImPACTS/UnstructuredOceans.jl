@@ -19,11 +19,7 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
     # unpack the layer thickness tendency term (@Cells)
     @unpack tendLayerThickness = Tend 
 
-    # initialize the kernel. Warp-multiple workgroup (DEFAULT_NTHREADS = 64) avoids
-    # the idle lanes that a 50-wide group left in each 32-lane warp. Overridable via
-    # the `nthreads` keyword.
     kernel!  = thicknessFluxDivOnCell!(backend, nthreads)
-    # use kernel to compute divergence of the thickness flux
     kernel!(tendLayerThickness,
             thicknessFlux,
             nEdgesOnCell,     
@@ -34,10 +30,6 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
             areaCell, 
             ndrange=nCells)
 
-    # No host KA.synchronize: redundant on a single CUDA stream, and its
-    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
-
-    # pack the tendecy pack into the struct for further computation
     @pack! Tend = tendLayerThickness 
 end
 

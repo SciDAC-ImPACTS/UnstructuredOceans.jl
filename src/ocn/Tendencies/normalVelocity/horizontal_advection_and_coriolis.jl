@@ -29,11 +29,7 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
     # unpack the normal velocity tendency term
     @unpack tendNormalVelocity = Tend 
     
-    # initialize the kernel. Workgroup size defaults to DEFAULT_NTHREADS (a warp
-    # multiple, 64) so no lanes sit idle: 50 spanned two 32-wide warps with 14 dead
-    # lanes (~22% waste). Overridable via the `nthreads` keyword.
     kernel!  = coriolis_force_tendency_kernel!(backend, nthreads)
-    # use kernel to compute coriolis and horizontal advection
     kernel!(tendNormalVelocity,
             normalVelocity,
             fᵉ, 
@@ -42,8 +38,6 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
             maxLevelEdge.Top, 
             weightsOnEdge, 
             ndrange = nEdges)
-    # No host KA.synchronize: redundant on a single CUDA stream, and its
-    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
 
     # pack the tendecy pack into the struct for further computation
     @pack! Tend = tendNormalVelocity
