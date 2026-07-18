@@ -38,24 +38,70 @@
 #
 # Run with:  julia --project=. examples/barotropic_gyre/kernel_benchmark.jl
 #
+# GPU vendors: whichever of CUDA (NVIDIA) and AMDGPU (AMD/ROCm) are installed and
+# functional are detected and swept; the default sweep is GPU-only (the CPU is opt-in
+# via KBENCH_BACKENDS=CPU) so per-kernel GPU numbers aren't crowded by the CPU.
+#
+# HPC-friendly output: the CSV is APPENDED to (not overwritten) and every row is
+# stamped with the host node, the concrete device string, and a UTC timestamp, so
+# per-kernel timings gathered from GPUs on different compute nodes accumulate into one
+# shared file and stay attributable. Redirect the file with KBENCH_CSV.
+#
 # Environment overrides (all optional):
-#   KBENCH_BACKENDS=GPU        # or =CPU, or =GPU,CPU        (default: both)
+#   KBENCH_BACKENDS=CUDA,AMD   # subset of CUDA,AMD,CPU        (default: all detected GPUs)
 #   KBENCH_RES=5km,10km,20km,40km       # subset/order of resolutions  (default: all found)
 #   KBENCH_SAMPLES=200         # timed samples per kernel      (default 200)
 #   KBENCH_SECONDS=30          # BenchmarkTools budget/kernel  (default 30)
 #   KBENCH_REPEATS=1           # kernel launches per sample (amortizes launch overhead)
-#   KBENCH_DEVICE=1            # CUDA device index             (default 1)
+#   KBENCH_CUDA_DEVICE=1       # CUDA device index             (default 1)
+#   KBENCH_AMD_DEVICE=1        # AMD/ROCm device index         (default 1)
+#   KBENCH_CSV=/path/out.csv   # output CSV (default: kernel_benchmark.csv here)
 
 using Dates
 import KernelAbstractions as KA
 using BenchmarkTools
 using MOKA
-using CUDA
-import CUDA: @allowscalar
+using GPUArraysCore: @allowscalar
 using DelimitedFiles
 using Printf
 
-CUDA.device!(parse(Int, get(ENV, "KBENCH_DEVICE", "1")))
+# --- GPU vendors ----------------------------------------------------------------
+# Detect and load whichever GPU vendor packages are installed + functional, picking a
+# device on each. Each contributes a "name => KA backend" pair to GPU_BACKENDS and a
+# hardware string to DEVICE_LABELS (written into every row for multi-node provenance).
+# @allowscalar above is GPUArraysCore's vendor-agnostic version (works for CuArray and
+# ROCArray). Runtime comparisons are GPU-vs-GPU, so the CPU is excluded here (opt-in via
+# KBENCH_BACKENDS=CPU; see selected_backends).
+const GPU_BACKENDS  = Pair{String,Any}[]
+const DEVICE_LABELS = Dict{String,String}("CPU" => Sys.CPU_NAME)
+
+try
+    @eval import CUDA
+    if CUDA.functional()
+        CUDA.device!(parse(Int, get(ENV, "KBENCH_CUDA_DEVICE", get(ENV, "KBENCH_DEVICE", "1"))))
+        push!(GPU_BACKENDS, "CUDA" => CUDA.CUDABackend())
+        DEVICE_LABELS["CUDA"] = CUDA.name(CUDA.device())
+    end
+catch err
+    @debug "CUDA not available for the kernel benchmark" exception = err
+end
+
+try
+    @eval import AMDGPU
+    if AMDGPU.has_rocm_gpu()
+        AMDGPU.device!(parse(Int, get(ENV, "KBENCH_AMD_DEVICE", "1")))
+        push!(GPU_BACKENDS, "AMD" => AMDGPU.ROCBackend())
+        DEVICE_LABELS["AMD"] = AMDGPU.HIP.name(AMDGPU.device())
+    end
+catch err
+    @debug "AMDGPU not available for the kernel benchmark" exception = err
+end
+
+isempty(GPU_BACKENDS) && @warn "No functional GPU (CUDA or AMD) detected; only \
+    KBENCH_BACKENDS=CPU will produce results."
+
+device_label(bname) = get(DEVICE_LABELS, bname, "unknown")
+const HOSTNAME = gethostname()
 
 # --- Resolution ladder (barotropic gyre) --------------------------------------------
 # Only directories that actually contain a config are swept; ncells/nEdges are read
@@ -76,11 +122,14 @@ function selected_resolutions()
     return [r for w in want for r in found if r.name == w]
 end
 
+# Default sweep is GPU-only (all detected vendors); the CPU is opt-in via
+# KBENCH_BACKENDS (e.g. =CUDA,CPU or =CPU) for a one-off cross-check.
 function selected_backends()
-    all = ["GPU" => CUDABackend(), "CPU" => KA.CPU()]
-    haskey(ENV, "KBENCH_BACKENDS") || return all
+    haskey(ENV, "KBENCH_BACKENDS") || return copy(GPU_BACKENDS)
+    available = copy(GPU_BACKENDS)
+    push!(available, "CPU" => KA.CPU())
     want = split(ENV["KBENCH_BACKENDS"], ',')
-    return filter(p -> first(p) in want, all)
+    return filter(p -> first(p) in want, available)
 end
 
 const SAMPLES = parse(Int,     get(ENV, "KBENCH_SAMPLES", "200"))
@@ -193,15 +242,44 @@ ns_per_launch(trial) = (min    = minimum(trial).time / REPEATS,
                         mean   = BenchmarkTools.mean(trial).time / REPEATS,
                         n      = length(trial.times))
 
+# --- Append-mode CSV writer ------------------------------------------------------
+# APPEND rather than overwrite so per-kernel results gathered from GPUs across many HPC
+# compute nodes — each job writing to a shared file on a common filesystem — accumulate
+# into ONE table instead of clobbering each other. Every row carries host/device/
+# timestamp provenance (see main) so appended rows stay attributable and de-dupable.
+# The header is written only when the file is first created; on a pre-existing file we
+# verify the stored header matches before appending and refuse to corrupt a file with a
+# different (older) schema. Use a per-node KBENCH_CSV to avoid concurrent writers.
+function append_rows!(out, header, rows)
+    exists = isfile(out) && filesize(out) > 0
+    if exists
+        existing = open(readline, out)
+        wanted   = chomp(sprint(io -> writedlm(io, header, ',')))
+        existing == wanted || error("""
+            CSV schema mismatch: $out already exists with a different header.
+              existing: $existing
+              expected: $wanted
+            Appending would misalign columns. Remove/rename the old file (or set a
+            different KBENCH_CSV) and re-run.""")
+    end
+    open(out, "a") do io
+        exists || writedlm(io, header, ',')      # header only on first creation
+        writedlm(io, permutedims(hcat(rows...)), ',')
+    end
+    return out
+end
+
 function main()
     backends    = selected_backends()
     resolutions = selected_resolutions()
     isempty(resolutions) && error("No barotropic-gyre resolutions found to benchmark.")
+    stamp = Dates.format(Dates.now(Dates.UTC), "yyyy-mm-ddTHH:MM:SSZ")
 
     rows = Vector{Any}[]
     for (bname, backend) in backends
+        device = device_label(bname)
         for res in resolutions
-            print("\n=== [$bname] $(res.name): init + warm-up... "); flush(stdout)
+            print("\n=== [$bname] $(res.name)  host=$HOSTNAME  device=$device: init + warm-up... "); flush(stdout)
             st = setup_state(res.dir, res.config, backend)
             @printf("nEdges=%d nCells=%d nVertices=%d ===\n", st.nEdges, st.nCells, st.nVertices)
             @printf("  %-13s %-30s %10s  %12s  %12s  %10s\n",
@@ -218,7 +296,8 @@ function main()
                 nspe = ext > 0 ? s.min / ext : NaN
                 @printf("  %-13s %-30s %10d  %12.3f  %12.3f  %10.4f\n",
                         k.group, k.name, ext, s.min/1e3, s.median/1e3, nspe)
-                push!(rows, Any[bname, res.name, st.nEdges, st.nCells, st.nVertices,
+                push!(rows, Any[HOSTNAME, device, stamp, bname, res.name,
+                                st.nEdges, st.nCells, st.nVertices,
                                 k.group, k.name, string(k.extent), ext, s.n,
                                 s.min, s.median, s.mean, nspe])
                 GC.gc()
@@ -226,14 +305,13 @@ function main()
         end
     end
 
-    header = ["backend" "res" "nEdges" "nCells" "nVertices" "group" "kernel" "extent" "extent_count" "samples" "min_ns" "median_ns" "mean_ns" "ns_per_elem"]
-    data   = permutedims(hcat(rows...))
-    out    = joinpath(BG, "kernel_benchmark.csv")
-    open(out, "w") do io
-        writedlm(io, header, ',')
-        writedlm(io, data, ',')
-    end
-    println("\nWrote $out")
+    isempty(rows) && (println("\nNo successful kernels — nothing written."); return nothing)
+
+    # host/device/timestamp identify which node+GPU produced each row (appended-file safe).
+    header = ["host" "device" "timestamp" "backend" "res" "nEdges" "nCells" "nVertices" "group" "kernel" "extent" "extent_count" "samples" "min_ns" "median_ns" "mean_ns" "ns_per_elem"]
+    out    = get(ENV, "KBENCH_CSV", joinpath(BG, "kernel_benchmark.csv"))
+    append_rows!(out, header, rows)
+    println("\nAppended $(length(rows)) row(s) to $out")
 end
 
 main()

@@ -47,6 +47,11 @@
 #   RES_BENCH_INTEGRATOR=RK4      # or ForwardEuler (default ForwardEuler)
 #   RES_BENCH_SAMPLES=5           # timed samples per case (default 5)
 #   RES_BENCH_SECONDS=600         # BenchmarkTools time budget per case (default 600)
+#   RES_BENCH_CSV=/path/out.csv   # output CSV (default: next to this script)
+#
+# The CSV is APPENDED to (not overwritten) and every row is stamped with the host node,
+# the GPU/CPU device string, and a UTC timestamp, so jobs run on different HPC compute
+# nodes (each on its own GPU) can accumulate into one shared file and remain separable.
 
 using Dates
 import KernelAbstractions as KA

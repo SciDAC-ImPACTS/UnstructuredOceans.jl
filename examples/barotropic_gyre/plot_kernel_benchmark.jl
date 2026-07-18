@@ -51,12 +51,19 @@ uniq_kernels  = unique(kernel)                       # stable first-seen order
 kcolor = Dict(k => c for (k, c) in
               zip(uniq_kernels, Makie.categorical_colors(:tab20, max(length(uniq_kernels), 2))))
 
-# Sorted (x, y) for one kernel on one backend, restricted to finite y.
+# Sorted (x, y) for one kernel on one backend, restricted to finite y. The CSV is
+# append-mode and may hold several rows for the same (kernel, backend, ncells) — repeat
+# runs, or multiple HPC nodes sharing a backend name — so collapse duplicates to the MIN
+# value (the standard low-noise estimator), one point per cell count.
 function series(vals, k, b)
     idx = (kernel .== k) .& (backend .== b) .& isfinite.(vals)
     x = ncells[idx]; y = vals[idx]
-    o = sortperm(x)
-    return x[o], y[o]
+    best = Dict{Float64,Float64}()
+    for (xi, yi) in zip(x, y)
+        best[xi] = haskey(best, xi) ? min(best[xi], yi) : yi
+    end
+    xs = sort(collect(keys(best)))
+    return xs, [best[xi] for xi in xs]
 end
 
 # Rank kernels by their WORST local scaling exponent: the steepest log-log slope of
@@ -70,10 +77,13 @@ function worst_exponent(k, b)
     slopes = [log(y[i+1] / y[i]) / log(x[i+1] / x[i]) for i in 1:length(x)-1]
     return maximum(slopes)
 end
-b0     = first(uniq_backends)
-ratios = [(k, worst_exponent(k, b0)) for k in uniq_kernels]
-worst  = isempty(ratios) ? "" :
-         first(sort(filter(r -> isfinite(r[2]), ratios), by = last, rev = true))[1]
+b0      = first(uniq_backends)
+ratios  = [(k, worst_exponent(k, b0)) for k in uniq_kernels]
+# Need ≥2 resolutions for a finite scaling exponent; with a single-resolution CSV
+# (a partial/just-started multi-node collection) none are finite, so highlight nothing.
+finite_ratios = filter(r -> isfinite(r[2]), ratios)
+worst  = isempty(finite_ratios) ? "" :
+         first(sort(finite_ratios, by = last, rev = true))[1]
 
 lw(k)  = k == worst ? 4 : 2
 mz(k)  = k == worst ? 13 : 8
