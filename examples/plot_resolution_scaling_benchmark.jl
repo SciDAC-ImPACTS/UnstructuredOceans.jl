@@ -3,7 +3,8 @@
 # Reads the forward CSV (resolution_scaling_benchmark.csv) and, if present, the AD
 # CSV (resolution_scaling_ad_benchmark.csv) — written by the two now-separate
 # benchmark scripts — and renders how runtime scales with mesh size (cell count),
-# comparing the GPU and CPU backends, with CairoMakie.
+# comparing the GPU backends (NVIDIA CUDA and/or AMD ROCm; the CPU is excluded from
+# the benchmark's default sweep), with CairoMakie.
 #
 # The forward and AD results are plotted on SEPARATE figures (they are different
 # drivers with different step counts, so putting them on one graph invites
@@ -13,7 +14,8 @@
 #
 # Each figure has two panels:
 #   (left)  runtime per timestep vs cell count  (one line per backend)
-#   (right) GPU speed-up (CPU s/step / GPU s/step) vs cell count
+#   (right) backend runtime ratio vs cell count (the two backends whose curves are
+#           present — e.g. AMD/CUDA, or CPU/GPU if a CPU cross-check was recorded)
 #
 # The per-step runtime (not total) is plotted so backends are comparable. A
 # reference O(N) slope is drawn so you can read off how close each curve is to
@@ -55,9 +57,13 @@ probtitle = Dict("gyre" => "barotropic gyre",
                  "igw"  => "inertial-gravity wave")
 probname_of(problem) = get(probtitle, problem, problem)
 
-bstyle    = Dict("GPU" => :solid, "CPU" => :dash)
-bmarker   = Dict("GPU" => :circle, "CPU" => :utriangle)
-bcolor    = Dict("GPU" => :dodgerblue3, "CPU" => :darkorange2)
+# Per-backend styling. GPU vendors are solid lines; the CPU (only present when a
+# cross-check run recorded it) is dashed. Unknown backend names fall back to the
+# defaults in plot_dataset.
+bstyle    = Dict("CUDA" => :solid, "AMD" => :solid, "GPU" => :solid, "CPU" => :dash)
+bmarker   = Dict("CUDA" => :circle, "AMD" => :diamond, "GPU" => :circle, "CPU" => :utriangle)
+bcolor    = Dict("CUDA" => :dodgerblue3, "AMD" => :firebrick3, "GPU" => :dodgerblue3,
+                 "CPU" => :darkorange2)
 
 # Helper: sorted (x, y) for a backend selection within one dataset.
 function series(data, b)
@@ -103,27 +109,41 @@ function plot_dataset(data, label, png)
     end
     axislegend(ax1; position = :lt, framevisible = true, labelsize = 11)
 
-    # --- Speed-up panel: CPU / GPU per-step runtime -------------------------------
-    ax2 = Axis(fig[1, 2];
-               title  = "Backend runtime ratio (CPU / GPU)\n>1 ⇒ GPU faster",
-               xlabel = "number of cells  N",
-               ylabel = "CPU s/step / GPU s/step  [×]",
-               xscale = log10, yscale = log10)
+    # --- Ratio panel: per-step runtime of one backend relative to another ---------
+    # With two backends present (the default is GPU-vs-GPU, e.g. AMD vs CUDA; a CPU
+    # cross-check gives CPU vs GPU) plot num/den at each shared cell count, where
+    # (num, den) is chosen so the ratio reads as "how many × faster den is". CPU is
+    # always the numerator when present (GPUs are faster); otherwise the second
+    # detected GPU vendor is the numerator over the first.
+    if length(uniq_backends) == 2
+        bs = sort(uniq_backends)                      # deterministic ordering
+        num, den = "CPU" in bs ? ("CPU", first(setdiff(bs, ["CPU"]))) : (bs[2], bs[1])
+        ax2 = Axis(fig[1, 2];
+                   title  = "Backend runtime ratio ($num / $den)\n>1 ⇒ $den faster",
+                   xlabel = "number of cells  N",
+                   ylabel = "$num s/step / $den s/step  [×]",
+                   xscale = log10, yscale = log10)
 
-    if "GPU" in uniq_backends && "CPU" in uniq_backends
-        xg, yg = series(data, "GPU")
-        xc, yc = series(data, "CPU")
-        common = intersect(xg, xc)
+        xn, yn = series(data, num)
+        xd, yd = series(data, den)
+        common = intersect(xn, xd)
         if !isempty(common)
             cs = sort(collect(common))
-            speedup = [yc[findfirst(==(n), xc)] / yg[findfirst(==(n), xg)] for n in cs]
-            scatterlines!(ax2, cs, speedup;
+            ratio = [yn[findfirst(==(n), xn)] / yd[findfirst(==(n), xd)] for n in cs]
+            scatterlines!(ax2, cs, ratio;
                           color = :seagreen, marker = :rect, markersize = 11,
                           linewidth = 2)
             hlines!(ax2, [1.0]; color = (:gray, 0.6), linestyle = :dash)
         end
     else
-        text!(ax2, 0.5, 0.5; text = "need both GPU and CPU\nruns for speed-up",
+        ax2 = Axis(fig[1, 2];
+                   title  = "Backend runtime ratio",
+                   xlabel = "number of cells  N",
+                   ylabel = "ratio  [×]")
+        have = join(uniq_backends, ", ")
+        msg = isempty(uniq_backends) ? "no data" :
+              "need exactly two backends\nfor a ratio (have: $have)"
+        text!(ax2, 0.5, 0.5; text = msg,
               align = (:center, :center), space = :relative, color = :gray)
     end
 

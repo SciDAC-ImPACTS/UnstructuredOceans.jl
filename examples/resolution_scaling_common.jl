@@ -5,14 +5,49 @@
 # everything both drivers share: the resolution ladders, backend/resolution
 # selection, the BenchmarkTools timing harness, the per-sample state reset
 # helpers, and the CSV writer. The mode-specific setup/reset/run functions and
-# the CUDA malloc-heap sizing (AD only) live in the two entry-point scripts.
+# the device malloc-heap sizing (AD only) live in the two entry-point scripts.
 #
 # NB: this file is `include`d, not `using`d — it assumes the caller has already
-# brought MOKA, CUDA, KernelAbstractions, BenchmarkTools, Dates, DelimitedFiles
-# and Printf into scope. Only the AD script additionally loads Enzyme +
+# brought MOKA, KernelAbstractions, BenchmarkTools, Dates, DelimitedFiles and
+# Printf into scope. Only the AD script additionally loads Enzyme +
 # Checkpointing, so nothing here may reference them.
+#
+# GPU-vendor loading lives here (not in the entry scripts) so the same benchmark
+# runs on either an NVIDIA or an AMD box without editing: each vendor package is
+# loaded only if installed, and contributes its GPU backend only if a functional
+# device is present. `@allowscalar` (used by the entry scripts) is taken from
+# GPUArraysCore so it is vendor-agnostic.
 
-CUDA.device!(1)
+# --- GPU vendors ----------------------------------------------------------------
+# Detect and load whichever GPU vendor packages are installed, selecting a device
+# on each. Each functional vendor contributes a "name => KA backend" entry to
+# GPU_BACKENDS. Runtime comparisons are GPU-vs-GPU, so the CPU is NOT included
+# here (it is available only when explicitly requested via RES_BENCH_BACKENDS=CPU;
+# see selected_backends).
+const GPU_BACKENDS = Pair{String,Any}[]
+
+try
+    @eval import CUDA
+    if CUDA.functional()
+        CUDA.device!(parse(Int, get(ENV, "RES_BENCH_CUDA_DEVICE", "1")))
+        push!(GPU_BACKENDS, "CUDA" => CUDA.CUDABackend())
+    end
+catch err
+    @debug "CUDA not available for the resolution benchmark" exception = err
+end
+
+try
+    @eval import AMDGPU
+    if AMDGPU.has_rocm_gpu()
+        AMDGPU.device!(parse(Int, get(ENV, "RES_BENCH_AMD_DEVICE", "1")))
+        push!(GPU_BACKENDS, "AMD" => AMDGPU.ROCBackend())
+    end
+catch err
+    @debug "AMDGPU not available for the resolution benchmark" exception = err
+end
+
+isempty(GPU_BACKENDS) && @warn "No functional GPU (CUDA or AMD) detected; only \
+    RES_BENCH_BACKENDS=CPU will produce results."
 
 # --- Resolution ladders --------------------------------------------------------
 # ncells is a documented hint only; the true count is read from the mesh at run
@@ -46,12 +81,20 @@ function selected_resolutions()
     return [r for w in want for r in ALL_RES if r.name == w]
 end
 
-# Backends to sweep: name => KA backend. CUDABackend for GPU, KA.CPU() for CPU.
+# Backends to sweep: name => KA backend. The default sweep is GPU-only — every
+# functional GPU vendor detected above (CUDA and/or AMD) — because the runtime
+# comparison is GPU-vs-GPU; the CPU is excluded from the default so it does not
+# dominate the runtime plots. The CPU is still available on request via
+# RES_BENCH_BACKENDS (e.g. =CUDA,CPU or =CPU) for a one-off cross-check.
 function selected_backends()
-    all = ["GPU" => CUDABackend(), "CPU" => KA.CPU()]
-    haskey(ENV, "RES_BENCH_BACKENDS") || return all
+    available = copy(GPU_BACKENDS)
+    push!(available, "CPU" => KA.CPU())
+    if !haskey(ENV, "RES_BENCH_BACKENDS")
+        # Default: all detected GPUs, no CPU.
+        return copy(GPU_BACKENDS)
+    end
     want = split(ENV["RES_BENCH_BACKENDS"], ',')
-    return filter(p -> first(p) in want, all)
+    return filter(p -> first(p) in want, available)
 end
 
 const INTEGRATOR = parse_integrator(get(ENV, "RES_BENCH_INTEGRATOR", "ForwardEuler"))

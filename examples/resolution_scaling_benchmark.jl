@@ -1,10 +1,13 @@
 # Resolution-scaling benchmark — forward model
 # ============================================
 # Measures how MOKA's forward-model runtime scales with mesh resolution (problem
-# size) on the CPU and the GPU. The checkpointed reverse-mode AD driver is timed
-# by the companion script resolution_scaling_ad_benchmark.jl (same ladders, same
-# harness); the two were split so a forward-only sweep needn't load Enzyme /
-# Checkpointing and so each can be run and tuned independently.
+# size) on the available GPU(s) — NVIDIA (CUDA) and/or AMD (ROCm), whichever are
+# installed and functional. The runtime comparison is GPU-vs-GPU, so the CPU is
+# excluded by default (still runnable on request via RES_BENCH_BACKENDS=CPU). The
+# checkpointed reverse-mode AD driver is timed by the companion script
+# resolution_scaling_ad_benchmark.jl (same ladders, same harness); the two were
+# split so a forward-only sweep needn't load Enzyme / Checkpointing and so each
+# can be run and tuned independently.
 #
 # Two problem families ship nested resolutions of the SAME problem, so each is a
 # natural scaling ladder — every refinement quadruples the cell count while the
@@ -36,7 +39,9 @@
 #
 # Environment overrides (all optional):
 #   RES_BENCH_PROBLEM=gyre        # or =igw (default: gyre)
-#   RES_BENCH_BACKENDS=GPU        # or =CPU, or =GPU,CPU (default: both)
+#   RES_BENCH_BACKENDS=CUDA,AMD   # subset of CUDA,AMD,CPU (default: all detected GPUs)
+#   RES_BENCH_CUDA_DEVICE=1       # CUDA device index (default 1)
+#   RES_BENCH_AMD_DEVICE=1        # AMD/ROCm device index (default 1)
 #   RES_BENCH_RES=40km,20km       # subset/order of resolutions to sweep
 #   RES_BENCH_FWD_NSTEPS=8        # forward steps per resolution (default 8)
 #   RES_BENCH_INTEGRATOR=RK4      # or ForwardEuler (default ForwardEuler)
@@ -47,11 +52,13 @@ using Dates
 import KernelAbstractions as KA
 using BenchmarkTools
 using MOKA
-using CUDA
-import CUDA: @allowscalar
+using GPUArraysCore: @allowscalar
 using DelimitedFiles
 using Printf
 
+# resolution_scaling_common.jl loads whichever GPU vendor packages (CUDA, AMDGPU)
+# are installed + functional, and picks a device on each. @allowscalar above is
+# GPUArraysCore's vendor-agnostic version, so it works for CuArray and ROCArray.
 include(joinpath(@__DIR__, "resolution_scaling_common.jl"))
 
 const FWD_NSTEPS = parse(Int, get(ENV, "RES_BENCH_FWD_NSTEPS", "8"))
