@@ -15,7 +15,7 @@ using KernelAbstractions
     if iEdge < nEdges + 1
         @inbounds temp[k,iEdge] = VecEdge[k,iEdge] * dvEdge[iEdge]
     end
-    @synchronize()
+    # @synchronize()
 end
 
 @kernel function DivergenceOnCell_P2(DivCell,
@@ -36,7 +36,7 @@ end
     end
 
     DivCell[k,iCell] = DivCell[k,iCell] / areaCell[iCell]
-    @synchronize()
+    # @synchronize()
 end
 
 function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
@@ -86,7 +86,7 @@ end
         @inbounds GradEdge[k, iEdge] = (ScalarCell[k, jCell2] - ScalarCell[k, jCell1]) / dcEdge[iEdge]
     end
 
-    @synchronize()
+    # @synchronize()
 end
 
 function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; workgroupsize=DEFAULT_NTHREADS)
@@ -126,13 +126,23 @@ end
     for j in 1:vertexDegree
         @inbounds @private iEdge = edgesOnVertex[j, iVertex]
 
-        @inbounds CurlVertex[k, iVertex] += dcEdge[iEdge] *
-                                            invAreaTriangle *
-                                            VecEdge[k, iEdge] *
-                                            edgeSignOnVertex[j, iVertex]
+        # On a bounded mesh, boundary vertices have fewer than `vertexDegree` real
+        # edges; the missing slots are stored as edgesOnVertex == 0 (see the mesh
+        # setup loop in HorzMesh.jl, which skips them with `iEdge == 0 && continue`).
+        # edgeSignOnVertex is 0 there, so the contribution is zero anyway — but the
+        # loads dcEdge[0]/VecEdge[k,0] are still an out-of-bounds (index 0) read that
+        # ROCm/HIP traps as an illegal address (CUDA silently read adjacent memory).
+        # A structured `if iEdge != 0` (not `continue`) also differentiates correctly
+        # under Enzyme; see the identical guard in the Coriolis tendency kernel.
+        if iEdge != 0
+            @inbounds CurlVertex[k, iVertex] += dcEdge[iEdge] *
+                                                invAreaTriangle *
+                                                VecEdge[k, iEdge] *
+                                                edgeSignOnVertex[j, iVertex]
+        end
     end
 
-    @synchronize()
+    # @synchronize()
 end
 
 function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
@@ -195,7 +205,7 @@ end
         end
     end
 
-    @synchronize()
+    # @synchronize()
 end
 
 # Zeros out a vector along its entire length
@@ -204,5 +214,5 @@ end
     if j < arrayLength + 1
         tendNormalVelocity[1, j] = 0.0
     end
-    @synchronize()
+    # @synchronize()
 end

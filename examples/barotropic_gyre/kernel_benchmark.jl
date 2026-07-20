@@ -78,7 +78,7 @@ const DEVICE_LABELS = Dict{String,String}("CPU" => Sys.CPU_NAME)
 try
     @eval import CUDA
     if CUDA.functional()
-        CUDA.device!(parse(Int, get(ENV, "KBENCH_CUDA_DEVICE", get(ENV, "KBENCH_DEVICE", "1"))))
+        CUDA.device!(parse(Int, get(ENV, "KBENCH_CUDA_DEVICE", get(ENV, "KBENCH_DEVICE", "0"))))
         push!(GPU_BACKENDS, "CUDA" => CUDA.CUDABackend())
         DEVICE_LABELS["CUDA"] = CUDA.name(CUDA.device())
     end
@@ -89,7 +89,7 @@ end
 try
     @eval import AMDGPU
     if AMDGPU.has_rocm_gpu()
-        AMDGPU.device!(parse(Int, get(ENV, "KBENCH_AMD_DEVICE", "1")))
+        AMDGPU.device_id!(parse(Int, get(ENV, "KBENCH_AMD_DEVICE", "1")))
         push!(GPU_BACKENDS, "AMD" => AMDGPU.ROCBackend())
         DEVICE_LABELS["AMD"] = AMDGPU.HIP.name(AMDGPU.device())
     end

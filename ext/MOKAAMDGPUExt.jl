@@ -26,7 +26,7 @@ function MOKA.GPU()
 end
 
 Base.summary(::AMDGPUGPU) = "AMDGPUGPU"
-MOKA.device!(::AMDGPUGPU, i) = AMDGPU.device!(i)
+MOKA.device!(::AMDGPUGPU, i) = AMDGPU.device_id!(i)
 
 MOKA.architecture(::ROCArray)            = AMDGPUGPU()
 MOKA.architecture(::Type{ROCArray})      = AMDGPUGPU()
