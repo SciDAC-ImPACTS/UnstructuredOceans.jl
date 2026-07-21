@@ -35,7 +35,7 @@ const DEVICE_LABELS = Dict{String,String}("CPU" => Sys.CPU_NAME)
 try
     @eval import CUDA
     if CUDA.functional()
-        CUDA.device!(parse(Int, get(ENV, "RES_BENCH_CUDA_DEVICE", "1")))
+        CUDA.device!(parse(Int, get(ENV, "RES_BENCH_CUDA_DEVICE", "0")))
         push!(GPU_BACKENDS, "CUDA" => CUDA.CUDABackend())
         DEVICE_LABELS["CUDA"] = CUDA.name(CUDA.device())
     end
@@ -46,7 +46,7 @@ end
 try
     @eval import AMDGPU
     if AMDGPU.has_rocm_gpu()
-        AMDGPU.device!(parse(Int, get(ENV, "RES_BENCH_AMD_DEVICE", "1")))
+        AMDGPU.device_id!(parse(Int, get(ENV, "RES_BENCH_AMD_DEVICE", "1")))
         push!(GPU_BACKENDS, "AMD" => AMDGPU.ROCBackend())
         DEVICE_LABELS["AMD"] = AMDGPU.HIP.name(AMDGPU.device())
     end
@@ -100,7 +100,7 @@ end
 # RES_BENCH_BACKENDS (e.g. =CUDA,CPU or =CPU) for a one-off cross-check.
 function selected_backends()
     available = copy(GPU_BACKENDS)
-    push!(available, "CPU" => KA.CPU())
+    push!(available, "CUDA" => CUDA.CUDABackend(), "AMD" => AMDGPU.ROCBackend(), "CPU" => KA.CPU())
     if !haskey(ENV, "RES_BENCH_BACKENDS")
         # Default: all detected GPUs, no CPU.
         return copy(GPU_BACKENDS)
