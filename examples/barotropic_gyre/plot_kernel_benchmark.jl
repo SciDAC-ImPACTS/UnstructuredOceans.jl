@@ -39,12 +39,15 @@ ncells    = Float64.(col("nCells"))
 extcount  = Float64.(col("extent_count"))
 min_ns    = Float64.(col("min_ns"))
 ns_elem   = Float64.(col("ns_per_elem"))     # min_ns / extent_count (NaN when extent unknown)
+# `device` is present in the current schema; older CSVs lack it → "unknown".
+device    = "device" in header ? string.(col("device")) : fill("unknown", size(raw, 1))
 
 # Per-kernel lines only: drop the composite drivers (their parts are plotted separately).
 keep       = group .!= "composite"
 backend    = backend[keep]; group = group[keep]; kernel = kernel[keep]
 ncells     = ncells[keep];  extcount = extcount[keep]
 min_ns     = min_ns[keep];  ns_elem = ns_elem[keep]
+device     = device[keep]
 
 uniq_backends = unique(backend)
 uniq_kernels  = unique(kernel)                       # stable first-seen order
@@ -55,13 +58,25 @@ kcolor = Dict(k => c for (k, c) in
 # append-mode and may hold several rows for the same (kernel, backend, ncells) — repeat
 # runs, or multiple HPC nodes sharing a backend name — so collapse duplicates to the MIN
 # value (the standard low-noise estimator), one point per cell count.
+#
+# Device-aware: a backend label can span physically different cards. We still collapse to
+# one point per cell count but WARN when it spans distinct devices, so mixed hardware is
+# never mistaken for one machine. Pin a single card with KBENCH_PLOT_DEVICE=<string>.
+const PLOT_DEVICE = get(ENV, "KBENCH_PLOT_DEVICE", "")
+
 function series(vals, k, b)
     idx = (kernel .== k) .& (backend .== b) .& isfinite.(vals)
-    x = ncells[idx]; y = vals[idx]
+    isempty(PLOT_DEVICE) || (idx = idx .& (device .== PLOT_DEVICE))
+    x = ncells[idx]; y = vals[idx]; dev = device[idx]
     best = Dict{Float64,Float64}()
-    for (xi, yi) in zip(x, y)
+    devs = Dict{Float64,Set{String}}()
+    for (xi, yi, di) in zip(x, y, dev)
         best[xi] = haskey(best, xi) ? min(best[xi], yi) : yi
+        push!(get!(devs, xi, Set{String}()), di)
     end
+    any(length(s) > 1 for s in values(devs)) && @warn "kernel $k / backend $b: \
+        min-collapsed across multiple devices — plotted point is the fastest card, not \
+        one machine. Set KBENCH_PLOT_DEVICE to pin one."
     xs = sort(collect(keys(best)))
     return xs, [best[xi] for xi in xs]
 end
