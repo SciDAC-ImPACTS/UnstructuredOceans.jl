@@ -2,7 +2,6 @@ using Test
 using MOKA
 using UnPack
 using LinearAlgebra
-using GPUArraysCore: @allowscalar
 
 import Adapt
 import Downloads
@@ -42,7 +41,7 @@ gradAnn = ∇hₑ(setup, PlanarTest)
 
 # Numerical gradient using KernelAbstractions operator 
 gradNum = KA.zeros(backend, Float64, (nVertLevels, nEdges))
-@allowscalar GradientOnEdge!(gradNum, Scalar, MPASMesh)
+GradientOnEdge!(gradNum, Scalar, MPASMesh)
 
 gradError = ErrorMeasures(gradNum, gradAnn, HorzMesh, Edge)
 
@@ -80,7 +79,7 @@ VecEdge = 𝐅ₑ(setup, PlanarTest)
 curlAnn = curl𝐅(setup, PlanarTest)
 # Numerical curl using KernelAbstractions operator
 curlNum = KA.zeros(backend, Float64, (nVertLevels, nVertices))
-@allowscalar CurlOnVertex!(curlNum, VecEdge, MPASMesh)
+CurlOnVertex!(curlNum, VecEdge, MPASMesh)
 
 curlError = ErrorMeasures(curlNum, curlAnn, HorzMesh, Vertex)
 
