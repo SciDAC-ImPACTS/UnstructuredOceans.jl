@@ -152,16 +152,14 @@ function plot_fields(f::Dict, case::ExampleCase)
     xe, ye = f["xEdge"], f["yEdge"]
     res    = resolution(case)
 
-    fig = Figure(size = (1500, 900))
-    Label(fig[0, 1:6], "$(casename(case))  —  primal fields (top) & adjoints (bottom),  Res: $(res)",
-          fontsize = 20, font = :bold)
+    fig = Figure(size = (1200, 1500))
 
     # Row 1 — primal
     panel!(fig, 1, 1, xc, yc, f["ssh"],            "ssh",            "ssh")
-    panel!(fig, 1, 2, xc, yc, f["layerThickness"], "layerThickness", "layerThickness")
+    panel!(fig, 2, 1, xc, yc, f["layerThickness"], "layerThickness", "layerThickness")
 
     # Row 2 — adjoint / gradient
-    panel!(fig, 2, 1, xc, yc, f["d_ssh"],            "∂J/∂ssh",            "adjoint ssh";            symmetric = true)
+    panel!(fig, 1, 2, xc, yc, f["d_ssh"],            "∂J/∂ssh",            "adjoint ssh";            symmetric = true)
     panel!(fig, 2, 2, xc, yc, f["d_layerThickness"], "∂J/∂layerThickness", "adjoint layerThickness"; symmetric = true)
 
     # Column 3 — normalVelocity. The raw per-edge normal component alternates sign between
@@ -172,13 +170,15 @@ function plot_fields(f::Dict, case::ExampleCase)
     if haskey(f, "angleEdge")
         u, v  = reconstruct_cell_velocity(f["normalVelocity"],   f["angleEdge"], f["edgesOnCell"], f["nEdgesOnCell"])
         du, _ = reconstruct_cell_velocity(f["d_normalVelocity"], f["angleEdge"], f["edgesOnCell"], f["nEdgesOnCell"])
-        panel!(fig, 1, 3, xc, yc, sqrt.(u.^2 .+ v.^2), "normalVelocity |u|",        "speed [m/s]")
-        panel!(fig, 2, 3, xc, yc, du,                  "∂J/∂normalVelocity (zonal)", "adjoint u"; symmetric = true)
+        panel!(fig, 3, 1, xc, yc, sqrt.(u.^2 .+ v.^2), "normalVelocity |u|",        "speed [m/s]")
+        panel!(fig, 3, 2, xc, yc, du,                  "∂J/∂normalVelocity (zonal)", "adjoint u"; symmetric = true)
     else
         @warn "no initial_state.nc mesh geometry — plotting raw per-edge normalVelocity (will look noisy)"
-        panel!(fig, 1, 3, xe, ye, f["normalVelocity"],   "normalVelocity",     "normalVelocity")
-        panel!(fig, 2, 3, xe, ye, f["d_normalVelocity"], "∂J/∂normalVelocity", "adjoint normalVelocity"; symmetric = true)
+        panel!(fig, 3, 1, xe, ye, f["normalVelocity"],   "normalVelocity",     "normalVelocity")
+        panel!(fig, 3, 2, xe, ye, f["d_normalVelocity"], "∂J/∂normalVelocity", "adjoint normalVelocity"; symmetric = true)
     end
+
+    Label(fig[0, 1:end], "$(casename(case))  —  primal fields (left) & adjoints (right),  Res: $(res)", fontsize = 24, font = :bold)
 
     return fig
 end
@@ -209,6 +209,8 @@ end
 
 # %% Main — plot both cases
 for case in (InertialGravityWave(), BarotropicGyre())
+    set_theme!(fontsize = 18)
     fig = run_case(case)
+    
     display(fig)
 end
