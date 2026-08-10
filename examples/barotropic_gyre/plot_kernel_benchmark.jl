@@ -88,28 +88,29 @@ worst  = isempty(finite_ratios) ? "" :
 lw(k)  = k == worst ? 4 : 2
 mz(k)  = k == worst ? 13 : 8
 
-fig = Figure(size = (1150, 430 * length(uniq_backends)))
+fig = Figure(size = (800, 430 * length(uniq_backends)))
 
 for (row, b) in enumerate(uniq_backends)
     ax1 = Axis(fig[row, 1];
                title  = "[$b] kernel runtime vs resolution (barotropic gyre)",
                xlabel = "number of cells  N", ylabel = "min runtime per launch  [µs]",
                xscale = log10, yscale = log10)
-    ax2 = Axis(fig[row, 2];
-               title  = "[$b] time per element  (flat ⇒ linear scaling; rising ⇒ suboptimal)",
-               xlabel = "number of cells  N", ylabel = "min_ns / element  [ns]",
-               xscale = log10, yscale = log10)
+    # ax2 = Axis(fig[row, 2];
+    #            title  = "[$b] time per element  (flat ⇒ linear scaling; rising ⇒ suboptimal)",
+    #            xlabel = "number of cells  N", ylabel = "min_ns / element  [ns]",
+    #            xscale = log10, yscale = log10)
 
     for k in uniq_kernels
         x1, y1 = series(min_ns, k, b)
         isempty(x1) && continue
-        lbl = k == worst ? "$k  ⚠ worst scaling" : k
+        # lbl = k == worst ? "$k  ⚠ worst scaling" : k
+        lbl = k
         scatterlines!(ax1, x1, y1 ./ 1e3; color = kcolor[k],
                       linewidth = lw(k), marker = :circle, markersize = mz(k), label = lbl)
 
-        x2, y2 = series(ns_elem, k, b)
-        isempty(x2) || scatterlines!(ax2, x2, y2; color = kcolor[k],
-                      linewidth = lw(k), marker = :circle, markersize = mz(k))
+        # x2, y2 = series(ns_elem, k, b)
+        # isempty(x2) || scatterlines!(ax2, x2, y2; color = kcolor[k],
+        #               linewidth = lw(k), marker = :circle, markersize = mz(k))
     end
 
     # O(N) reference in the absolute panel, anchored at the smallest measured point.

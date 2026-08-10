@@ -8,9 +8,12 @@
 #
 # The forward and AD results are plotted on SEPARATE figures (they are different
 # drivers with different step counts, so putting them on one graph invites
-# apples-to-oranges reading):
-#   resolution_scaling_benchmark.png    — forward model
-#   resolution_scaling_ad_benchmark.png — checkpointed AD (reverse)
+# apples-to-oranges reading), and within each, one figure PER PROBLEM CASE (the
+# `problem` column) so a mixed CSV never lands two problems on one graph. The
+# problem name is appended before the extension:
+#   resolution_scaling_benchmark_gyre.png       — forward model, barotropic gyre
+#   resolution_scaling_benchmark_igw.png        — forward model, inertial-gravity wave
+#   resolution_scaling_ad_benchmark_<problem>.png — checkpointed AD (reverse)
 #
 # Each figure has two panels:
 #   (left)  runtime per timestep vs cell count  (one line per backend)
@@ -53,8 +56,10 @@ isempty(fwd.mode) && isempty(ad.mode) &&
     error("neither $FWD_CSV nor $AD_CSV found — run the benchmark script(s) first.")
 
 # Human-readable problem name for the title.
-probtitle = Dict("gyre" => "barotropic gyre",
-                 "igw"  => "inertial-gravity wave")
+probtitle = Dict(
+        "gyre" => "barotropic gyre",
+        "igw"  => "inertial-gravity wave"
+    )
 probname_of(problem) = get(probtitle, problem, problem)
 
 # Per-backend styling. GPU vendors are solid lines; the CPU (only present when a
@@ -73,14 +78,38 @@ function series(data, b)
     return x[o], y[o]
 end
 
-# Render one figure (runtime + speed-up panels) for a single dataset (forward or AD).
+# Row selection for a single problem within one dataset (returns the same named
+# tuple shape as load_csv, so plot_case can treat it like a standalone dataset).
+function subset_problem(data, prob)
+    idx = data.problem .== prob
+    return (backend = data.backend[idx], mode = data.mode[idx],
+            ncells = data.ncells[idx], sstep = data.sstep[idx],
+            problem = data.problem[idx])
+end
+
+# Insert a problem suffix before the extension: foo.png -> foo_gyre.png.
+function suffix_png(png, prob)
+    base, ext = splitext(png)
+    return string(base, "_", prob, ext)
+end
+
+# Render one figure per problem ("case") in the dataset, each to its own PNG.
 function plot_dataset(data, label, png)
+    isempty(data.mode) && (println("skip $label — no data"); return)
+    for prob in unique(data.problem)
+        plot_case(subset_problem(data, prob), label, suffix_png(png, prob))
+    end
+end
+
+# Render one figure (runtime + speed-up panels) for a single problem case.
+set_theme!(fontsize = 18)
+function plot_case(data, label, png)
     isempty(data.mode) && (println("skip $label — no data"); return)
 
     probname = probname_of(first(data.problem))
     uniq_backends = unique(data.backend)
 
-    fig = Figure(size = (1050, 440))
+    fig = Figure(size = (800, 440))
 
     ax1 = Axis(fig[1, 1];
                title  = "$label runtime scaling ($probname)",
@@ -115,41 +144,41 @@ function plot_dataset(data, label, png)
     # (num, den) is chosen so the ratio reads as "how many × faster den is". CPU is
     # always the numerator when present (GPUs are faster); otherwise the second
     # detected GPU vendor is the numerator over the first.
-    if length(uniq_backends) == 2
-        bs = sort(uniq_backends)                      # deterministic ordering
-        num, den = "CPU" in bs ? ("CPU", first(setdiff(bs, ["CPU"]))) : (bs[2], bs[1])
-        ax2 = Axis(fig[1, 2];
-                   title  = "Backend runtime ratio ($num / $den)\n>1 ⇒ $den faster",
-                   xlabel = "number of cells  N",
-                   ylabel = "$num s/step / $den s/step  [×]",
-                   xscale = log10, yscale = log10)
+    # if length(uniq_backends) == 2
+    #     bs = sort(uniq_backends)                      # deterministic ordering
+    #     num, den = "CPU" in bs ? ("CPU", first(setdiff(bs, ["CPU"]))) : (bs[2], bs[1])
+    #     ax2 = Axis(fig[1, 2];
+    #                title  = "Backend runtime ratio ($num / $den)\n>1 ⇒ $den faster",
+    #                xlabel = "number of cells  N",
+    #                ylabel = "$num s/step / $den s/step  [×]",
+    #                xscale = log10, yscale = log10)
 
-        xn, yn = series(data, num)
-        xd, yd = series(data, den)
-        common = intersect(xn, xd)
-        if !isempty(common)
-            cs = sort(collect(common))
-            ratio = [yn[findfirst(==(n), xn)] / yd[findfirst(==(n), xd)] for n in cs]
-            scatterlines!(ax2, cs, ratio;
-                          color = :seagreen, marker = :rect, markersize = 11,
-                          linewidth = 2)
-            hlines!(ax2, [1.0]; color = (:gray, 0.6), linestyle = :dash)
-        end
-    else
-        ax2 = Axis(fig[1, 2];
-                   title  = "Backend runtime ratio",
-                   xlabel = "number of cells  N",
-                   ylabel = "ratio  [×]")
-        have = join(uniq_backends, ", ")
-        msg = isempty(uniq_backends) ? "no data" :
-              "need exactly two backends\nfor a ratio (have: $have)"
-        text!(ax2, 0.5, 0.5; text = msg,
-              align = (:center, :center), space = :relative, color = :gray)
-    end
+    #     xn, yn = series(data, num)
+    #     xd, yd = series(data, den)
+    #     common = intersect(xn, xd)
+    #     if !isempty(common)
+    #         cs = sort(collect(common))
+    #         ratio = [yn[findfirst(==(n), xn)] / yd[findfirst(==(n), xd)] for n in cs]
+    #         scatterlines!(ax2, cs, ratio;
+    #                       color = :seagreen, marker = :rect, markersize = 11,
+    #                       linewidth = 2)
+    #         hlines!(ax2, [1.0]; color = (:gray, 0.6), linestyle = :dash)
+    #     end
+    # else
+    #     ax2 = Axis(fig[1, 2];
+    #                title  = "Backend runtime ratio",
+    #                xlabel = "number of cells  N",
+    #                ylabel = "ratio  [×]")
+    #     have = join(uniq_backends, ", ")
+    #     msg = isempty(uniq_backends) ? "no data" :
+    #           "need exactly two backends\nfor a ratio (have: $have)"
+    #     text!(ax2, 0.5, 0.5; text = msg,
+    #           align = (:center, :center), space = :relative, color = :gray)
+    # end
 
     save(png, fig)
     println("Wrote $png")
 end
 
-plot_dataset(fwd, "Forward",       FWD_PNG)
+plot_dataset(fwd, "Primal",       FWD_PNG)
 plot_dataset(ad,  "AD (reverse)",  AD_PNG)
