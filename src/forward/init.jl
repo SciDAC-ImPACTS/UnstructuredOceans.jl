@@ -116,6 +116,9 @@ function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
         end
     end
 
+    h_mesh = read_horz_mesh(mesh_fp; backend=backend, momentumDel2=momentumDel2)
+    v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
+
     # wind-stress forcing gate: config_use_bulk_wind_stress in the forcing section
     # (default on for backwards compatibility with configs that omit it).
     use_wind_stress = true
@@ -124,12 +127,18 @@ function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
         use_wind_stress = Bool(config_get(forcingConfig, "config_use_bulk_wind_stress", true))
     end
 
-    h_mesh = read_horz_mesh(mesh_fp; backend=backend,
-                          momentumDel2=momentumDel2, rho=density,
-                          use_wind_stress=use_wind_stress)
-    v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
+    # forcing stream file (falls back to the mesh file, which is where the BG wind
+    # fields live). Build the ForcingVars (wind stress projected onto edge normals).
+    forcing_fp = mesh_fp
+    if config_has(Config.streams, "forcing")
+        forcingStream = config_get(Config.streams, "forcing")
+        forcing_fp = config_get(forcingStream, "filename_template", mesh_fp)
+    end
+    forcing = MOKA.MPASMesh.build_forcing(h_mesh, forcing_fp;
+                                          rho=density, use_wind_stress=use_wind_stress,
+                                          backend=backend)
 
-    return Mesh(h_mesh, v_mesh, constants)
+    return Mesh(h_mesh, v_mesh, constants, forcing)
 end
 
 function ocn_setup_clock(Config::GlobalConfig)

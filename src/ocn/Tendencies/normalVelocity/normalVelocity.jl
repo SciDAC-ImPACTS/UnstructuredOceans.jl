@@ -19,16 +19,20 @@ include("wind_forcing.jl")
                                       coriolis=linearCoriolis, viscDel2=..., nthreads=...)
 
 Assemble the normal-velocity tendency: pressure gradient + Coriolis/advection +
-lateral mixing + wind forcing. `coriolis` selects the momentum-advection scheme
-as a **type** (compile-time, so it is AD-safe as an Enzyme `Const`):
-`linearCoriolis` (default; the ``\\sum w f u`` term used by the barotropic
-gyre / IGW) or `vectorInvariant` (nonlinear ``q\\,\\mathbf{k}\\times(h\\mathbf{v})+\\nabla K``).
+lateral mixing + forcing. `coriolis` selects the momentum-advection scheme as a
+**type** (compile-time, so it is AD-safe as an Enzyme `Const`): `linearCoriolis`
+(default; the ``\\sum w f u`` term used by the barotropic gyre / IGW) or
+`vectorInvariant` (nonlinear ``q\\,\\mathbf{k}\\times(h\\mathbf{v})+\\nabla K``).
+`forcings` is a tuple of `AbstractForcing` types applied in order (default
+`(WindForcing,)`); each is dispatched to a `forcing_tendency!` method, so adding a
+forcing is a new type + method, not an edit here.
 """
 function compute_normal_velocity_tendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
                                         Diag::DiagnosticVars,
                                         Mesh::Mesh;
                                         coriolis::Type{<:Coriolis}=linearCoriolis,
+                                        forcings::Tuple=(WindForcing,),
                                         viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                                         nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Tend.tendNormalVelocity)
@@ -46,8 +50,11 @@ function compute_normal_velocity_tendency!(Tend::TendencyVars,
     horizontal_momentum_mixing_tendency!(
         Tend, Prog, Diag, Mesh, Del2; viscDel2=viscDel2, nthreads=nthreads)
 
-    wind_forcing_tendency!(
-        Tend, Diag, Mesh; nthreads=nthreads)
+    # Apply each configured forcing (dispatched by type). The tuple is a
+    # compile-time constant, so this is AD-safe and unrolls with no runtime cost.
+    for forcing in forcings
+        forcing_tendency!(Tend, Diag, Mesh, forcing; nthreads=nthreads)
+    end
 
 end
 

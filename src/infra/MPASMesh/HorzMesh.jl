@@ -95,8 +95,8 @@ end
     # 1 if the edge touches a missing (0) cell (solid wall), else 0
     boundaryEdge::IV
 
-    # edge-normal wind stress / rho projected onto edge normals [m^2 s^-2]
-    windForcingEdge::FV
+    # NOTE: wind forcing moved to ForcingVars (carried on the Mesh) in Phase 4;
+    # it is no longer a mesh-geometry field.
 
     # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive.
     # Stored as a 1-element device array (not a bare Float64) so it can be passed
@@ -272,8 +272,7 @@ function read_dual_mesh(ds)
               kiteAreasOnVertex = kiteAreasOnVertex)
 end
 
-function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
-                        use_wind_stress::Bool = true)
+function read_edge_info(ds; momentumDel2::Float64 = 0.0)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
@@ -312,28 +311,6 @@ function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
     # boundary mask: 1 if either neighbour cell is missing (index 0)
     boundaryEdge = Int32.(vec(any(cellsOnEdge .== 0; dims=1)))
 
-    # project wind stress onto edge normals; default to zero if fields absent or
-    # the term is switched off (config_use_bulk_wind_stress=false). Gating here —
-    # leaving windForcingEdge all zeros — makes the wind-forcing tendency a no-op
-    # without touching the differentiated ocn_timestep path (same strategy as
-    # momentumDel2=0 disabling mixing).
-    float_type = eltype(xᵉ)
-    if use_wind_stress && haskey(ds, "windStressZonal") && haskey(ds, "windStressMeridional")
-        τz_c = float_type.(ds["windStressZonal"][:,1])
-        τm_c = float_type.(ds["windStressMeridional"][:,1])
-        windForcingEdge = zeros(float_type, nEdges)
-        for iEdge in 1:nEdges
-            c1 = cellsOnEdge[1, iEdge]
-            c2 = cellsOnEdge[2, iEdge]
-            τz_e = (c1 == 0 ? τz_c[c2] : (c2 == 0 ? τz_c[c1] : 0.5*(τz_c[c1] + τz_c[c2])))
-            τm_e = (c1 == 0 ? τm_c[c2] : (c2 == 0 ? τm_c[c1] : 0.5*(τm_c[c1] + τm_c[c2])))
-            windForcingEdge[iEdge] = (τz_e * cos(angleEdge[iEdge]) +
-                                      τm_e * sin(angleEdge[iEdge])) / rho
-        end
-    else
-        windForcingEdge = zeros(float_type, nEdges)
-    end
-
     Edges(nEdges = nEdges,
           xᵉ = xᵉ, yᵉ = yᵉ, zᵉ = zᵉ, fᵉ = fᵉ,
           nEdgesOnEdge = nEdgesOnEdge,
@@ -345,7 +322,6 @@ function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
           dcEdge = dcEdge,
           angleEdge = angleEdge,
           boundaryEdge = boundaryEdge,
-          windForcingEdge = windForcingEdge,
           # wrap scalar viscosity in a 1-element array (see Edges struct comment)
           momentumDel2 = [momentumDel2])
 end
@@ -395,28 +371,25 @@ end
 
 """
     read_horz_mesh(meshPath; backend=KernelAbstractions.CPU(),
-                 momentumDel2=0.0, rho=1000.0) -> HorzMesh
+                 momentumDel2=0.0) -> HorzMesh
 
 Read an MPAS horizontal mesh from the NetCDF file at `meshPath` and return a
 [`HorzMesh`](@ref) with its arrays allocated on `backend`.
 
-Builds the primary cells, dual cells, and edges (including the boundary-edge
-mask, the wind-stress forcing projected onto edge normals, and the edge sign
-fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
-``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing), and
-`rho` is the reference density used to scale the wind forcing.
-`use_wind_stress=false` leaves the wind forcing zero (disables the wind term).
+Builds the primary cells, dual cells, and edges (including the boundary-edge mask
+and the edge sign fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
+``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing).
+Wind-stress forcing now lives in [`ForcingVars`](@ref) on the [`Mesh`](@ref),
+built separately (see `ocn_setup_mesh`), not on the horizontal mesh.
 """
 function read_horz_mesh(meshPath::String; backend=KA.CPU(),
-                      momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
-                      use_wind_stress::Bool = true)
+                      momentumDel2::Float64 = 0.0)
 
     ds = NCDataset(meshPath, "r", format=:netcdf4)
 
     PrimaryMesh = read_primary_mesh(ds)
     DualMesh    = read_dual_mesh(ds)
-    edges       = read_edge_info(ds; momentumDel2 = momentumDel2, rho = rho,
-                                 use_wind_stress = use_wind_stress)
+    edges       = read_edge_info(ds; momentumDel2 = momentumDel2)
     
     # set the edge sign on cells (primary mesh)
     sign_index_field!(PrimaryMesh, edges)
@@ -448,7 +421,6 @@ function Adapt.adapt_structure(to, edges::Edges)
                  dcEdge = Adapt.adapt(to, edges.dcEdge),
                  angleEdge = Adapt.adapt(to, edges.angleEdge),
                  boundaryEdge = Adapt.adapt(to, edges.boundaryEdge),
-                 windForcingEdge = Adapt.adapt(to, edges.windForcingEdge),
                  momentumDel2 = Adapt.adapt(to, edges.momentumDel2))
 end
 

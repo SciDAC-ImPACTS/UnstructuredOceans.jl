@@ -117,6 +117,7 @@ function ocn_timestep(dt,
                       Mesh::Mesh,
                       ::Type{RungeKutta4};
                       coriolis=MOKA.NormalVelocity.linearCoriolis,
+                      forcings=(MOKA.NormalVelocity.WindForcing,),
                       viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                       nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
@@ -163,7 +164,7 @@ function ocn_timestep(dt,
     diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     for RK_step in 1:4
-        compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; coriolis=coriolis, viscDel2=viscDel2, nthreads=nthreads)
+        compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; coriolis=coriolis, forcings=forcings, viscDel2=viscDel2, nthreads=nthreads)
         compute_layer_thickness_tendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
         @unpack tendNormalVelocity, tendLayerThickness = Tend
@@ -227,6 +228,7 @@ function ocn_timestep(timestep,
                       Mesh::Mesh,
                       ::Type{ForwardEuler};
                       coriolis=MOKA.NormalVelocity.linearCoriolis,
+                      forcings=(MOKA.NormalVelocity.WindForcing,),
                       viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                       nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
@@ -241,7 +243,7 @@ function ocn_timestep(timestep,
     diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     # compute normalVelocity tenedency
-    compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; coriolis=coriolis, viscDel2=viscDel2, nthreads=nthreads)
+    compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; coriolis=coriolis, forcings=forcings, viscDel2=viscDel2, nthreads=nthreads)
 
     # compute layerThickness tendency
     compute_layer_thickness_tendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
