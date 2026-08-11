@@ -85,6 +85,12 @@ ocn_init_alarms
 ocn_init_shadows
 ```
 
+## Tendencies
+
+```@docs
+MOKA.NormalVelocity.compute_normal_velocity_tendency!
+```
+
 ## Run loop and automatic differentiation
 
 ```@docs

@@ -44,9 +44,13 @@ and cell-centered reconstructions are diagnosed from it. This mirrors the
 MPAS-Ocean formulation.
 
 !!! note "Current physics scope"
-    The active dynamical core wires up the pressure gradient, **linear** Coriolis,
-    del2 viscosity, and wind forcing. The full nonlinear advection is present in
-    the code structure but not yet exercised.
+    The active dynamical core wires up the pressure gradient, Coriolis/advection,
+    del2 viscosity, and wind forcing. The Coriolis/advection term is selectable:
+    `linearCoriolis` (the default, ``\sum w f u``, used by the barotropic gyre and
+    inertial gravity wave) or `vectorInvariant`, the nonlinear vector-invariant
+    form ``q\,\mathbf{k}\times(h\mathbf{v}) + \nabla K`` with potential vorticity
+    ``q=(f+\zeta)/h`` and kinetic energy ``K``. Pass `coriolis=vectorInvariant` to
+    `ocn_timestep` to enable nonlinear advection.
 
     The core is **multi-layer capable**: every compute kernel loops over the
     vertical levels bounded by the per-column active levels (`maxLevelEdge`/

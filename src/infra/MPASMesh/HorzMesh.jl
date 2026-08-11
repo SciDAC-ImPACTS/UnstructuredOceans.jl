@@ -144,11 +144,12 @@ end
 end
 
 # (D)ual mesh cell
-@kwdef struct DualCells{I, FV, IM}
+@kwdef struct DualCells{I, FV, IM, FM}
     # I   --> (I)nt
-    # FV  --> (F)loat (V)ector 
-    # IV  --> (I)int  (V)ector 
-    # IM  --> (I)int  (M)atrix  
+    # FV  --> (F)loat (V)ector
+    # IV  --> (I)int  (V)ector
+    # IM  --> (I)int  (M)atrix
+    # FM  --> (F)loat (M)atrix
     
     # dimension info
     nVertices::I
@@ -169,9 +170,15 @@ end
     # inter vertex connecivity
     edgeSignOnVertex::IM #(E)dge (S)ign (o)n Vertex
 
-    # area of triangle 
+    # area of triangle
     areaTriangle::FV
-end 
+
+    # area [m^2] of the kite (portion of a dual triangle) associated with each of
+    # the cellsOnVertex; dim (vertexDegree, nVertices). Used to interpolate
+    # cell-centred fields (e.g. layer thickness) onto vertices for the
+    # vector-invariant potential-vorticity diagnostic.
+    kiteAreasOnVertex::FM
+end
 
 stack(arr, N) = [Tuple(arr[:,i]) for i in 1:N]
 
@@ -248,13 +255,22 @@ function read_dual_mesh(ds)
     # Triangle area
     areaTriangle = ds["areaTriangle"][:]
 
+    # kite areas (portion of each dual triangle per surrounding cell). Default to
+    # zeros if absent — only the vector-invariant PV diagnostic consumes them.
+    if haskey(ds, "kiteAreasOnVertex")
+        kiteAreasOnVertex = ds["kiteAreasOnVertex"][:,:]
+    else
+        kiteAreasOnVertex = zeros(eltype(xᵛ), (vertexDegree, nVertices))
+    end
+
     DualCells(nVertices = nVertices, vertexDegree = vertexDegree,
               xᵛ = xᵛ, yᵛ = yᵛ, zᵛ = zᵛ, fᵛ = fᵛ,
               edgesOnVertex = edgesOnVertex,
               cellsOnVertex = cellsOnVertex,
-              edgeSignOnVertex = edgeSignOnVertex, 
-              areaTriangle = areaTriangle)
-end 
+              edgeSignOnVertex = edgeSignOnVertex,
+              areaTriangle = areaTriangle,
+              kiteAreasOnVertex = kiteAreasOnVertex)
+end
 
 function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
                         use_wind_stress::Bool = true)
@@ -461,5 +477,6 @@ function Adapt.adapt_structure(to, duals::DualCells)
                      edgesOnVertex = Adapt.adapt(to, duals.edgesOnVertex),
                      cellsOnVertex = Adapt.adapt(to, duals.cellsOnVertex),
                      edgeSignOnVertex = Adapt.adapt(to, duals.edgeSignOnVertex),
-                     areaTriangle = Adapt.adapt(to, duals.areaTriangle))
+                     areaTriangle = Adapt.adapt(to, duals.areaTriangle),
+                     kiteAreasOnVertex = Adapt.adapt(to, duals.kiteAreasOnVertex))
 end

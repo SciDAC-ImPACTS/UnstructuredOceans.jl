@@ -175,6 +175,63 @@ end
 end
 
 ###
+### Vector-invariant reconstructions (Phase 3).
+###
+# Check the KE/thickness-vertex/PV kernels against exactly-representable inputs on
+# the periodic mesh (which carries kiteAreasOnVertex and fVertex), at every level.
+@testset "Vector-invariant reconstructions" begin
+    NV = MOKA.NormalVelocity
+    @unpack PrimaryCells, DualCells, Edges = HorzMesh
+    nthreads = MOKA.DEFAULT_NTHREADS
+
+    # layer_thickness_vertex! of a constant thickness recovers the constant
+    # (kite areas sum to the triangle area) at interior vertices, every level.
+    hconst = 1234.5
+    lth = fill(hconst, nVertLevels, nCells)
+    hv  = KA.zeros(backend, Float64, nVertLevels, nVertices)
+    khv! = NV.layer_thickness_vertex!(backend, nthreads)
+    khv!(hv, lth, DualCells.cellsOnVertex, DualCells.kiteAreasOnVertex,
+         DualCells.areaTriangle, DualCells.vertexDegree, nVertices,
+         ndrange=(nVertices, nVertLevels))
+    hv = Array(hv)
+    interior_v = [v for v in 1:nVertices if all(DualCells.cellsOnVertex[:, v] .!= 0)]
+    @test maximum(abs, hv[:, interior_v] .- hconst) / hconst < 1e-10
+    # identical across levels
+    @test all(hv[k, :] == hv[1, :] for k in 2:nVertLevels)
+
+    # potential_vorticity_vertex! with zero relative vorticity == f / h.
+    relVort = KA.zeros(backend, Float64, nVertLevels, nVertices)
+    hv_dev  = KA.zeros(backend, Float64, nVertLevels, nVertices)
+    copyto!(hv_dev, repeat(reshape(hv[1, :], 1, nVertices), nVertLevels, 1))
+    pv = KA.zeros(backend, Float64, nVertLevels, nVertices)
+    kpv! = NV.potential_vorticity_vertex!(backend, nthreads)
+    kpv!(pv, relVort, hv_dev, DualCells.fᵛ, nVertices, ndrange=(nVertices, nVertLevels))
+    pv = Array(pv)
+    fv = Array(DualCells.fᵛ)
+    expected = [hv[1, v] > 0 ? fv[v] / hv[1, v] : 0.0 for v in 1:nVertices]
+    @test maximum(abs, pv[1, interior_v] .- expected[interior_v]) /
+          max(maximum(abs, expected[interior_v]), eps()) < 1e-10
+
+    # kinetic_energy_cell!: zero velocity -> 0; uniform velocity -> ½u² interior.
+    kez  = KA.zeros(backend, Float64, nVertLevels, nCells)
+    uvel = KA.zeros(backend, Float64, nVertLevels, nEdges)
+    kke! = NV.kinetic_energy_cell!(backend, nthreads)
+    kke!(kez, uvel, PrimaryCells.nEdgesOnCell, PrimaryCells.edgesOnCell,
+         Edges.dcEdge, Edges.dvEdge, PrimaryCells.areaCell, nCells,
+         ndrange=(nCells, nVertLevels))
+    @test maximum(abs, Array(kez)) == 0.0
+    uc = 0.7
+    fill!(uvel, uc)
+    kke!(kez, uvel, PrimaryCells.nEdgesOnCell, PrimaryCells.edgesOnCell,
+         Edges.dcEdge, Edges.dvEdge, PrimaryCells.areaCell, nCells,
+         ndrange=(nCells, nVertLevels))
+    kez = Array(kez)
+    interior_c = [c for c in 1:nCells if all(PrimaryCells.edgesOnCell[1:PrimaryCells.nEdgesOnCell[c], c] .!= 0)]
+    @test maximum(abs, kez[:, interior_c] .- 0.5*uc^2) / (0.5*uc^2) < 1e-10
+    @test minimum(kez) >= 0.0
+end
+
+###
 ### Results Display
 ###
 
