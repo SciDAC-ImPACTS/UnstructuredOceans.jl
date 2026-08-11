@@ -1,5 +1,29 @@
 using MOKA.MPASMesh
 
+"""
+    ocn_init(Config_filepath; backend=KernelAbstractions.CPU())
+        -> (Setup, Diag, Tend, Prog)
+
+Initialize the ocean model from a YAML configuration file.
+
+Reads the configuration at `Config_filepath`, builds the horizontal and vertical
+[`Mesh`](@ref) and the simulation [`Clock`](@ref), and allocates the prognostic,
+diagnostic, and tendency state on `backend`.
+
+`backend` is a [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl)
+backend (e.g. `KernelAbstractions.CPU()`, or a GPU backend obtained from
+[`device`](@ref) of a [`GPU`](@ref) architecture). All model arrays are allocated
+on that backend.
+
+Returns a 4-tuple `(Setup, Diag, Tend, Prog)`:
+- `Setup` — a `ModelSetup` bundling the parsed config, `Mesh`, and `Clock`.
+- `Diag` — [`DiagnosticVars`](@ref) (edge thickness, fluxes, divergence, vorticity).
+- `Tend` — tendency accumulators for the prognostic variables.
+- `Prog` — [`PrognosticVars`](@ref) initialized from the input stream.
+
+The returned `Setup` carries the alarms needed to drive the run; recover them with
+[`ocn_init_alarms`](@ref) and advance the model with [`ocn_run_loop`](@ref).
+"""
 function ocn_init(Config_filepath; backend=KA.CPU())
     
     # read the configuration file 
@@ -28,6 +52,17 @@ function ocn_init(Config_filepath; backend=KA.CPU())
     return Setup, Diag, Tend, Prog
 end 
 
+"""
+    ocn_init_shadows(Prog, Diag, Tend; backend=KernelAbstractions.CPU())
+        -> d_Prog
+
+Allocate a zero-initialized shadow (derivative) copy of the prognostic state for
+use as an Enzyme differential argument (`Duplicated`).
+
+The returned `d_Prog` has the same shape as `Prog` with all fields set to zero,
+ready to be seeded by, or to receive, sensitivities during automatic
+differentiation. See the [Automatic differentiation](@ref) guide.
+"""
 function ocn_init_shadows(Prog, Diag, Tend; backend=KA.CPU())
 
     d_Prog = PrognosticVars(zeros(Float64, size(Prog.ssh)),
@@ -101,7 +136,17 @@ function ocn_setup_clock(Config::GlobalConfig)
     return clock
 end 
 
-# Helper function for setting the clock, simulationAlarm, and outputAlarm
+"""
+    ocn_init_alarms(Setup) -> (clock, simulationAlarm, outputAlarm)
+
+Retrieve the simulation clock and its two driving alarms from an initialized
+`Setup`.
+
+`ocn_init` attaches a one-time `"simulation_end"` alarm and a periodic
+`"outputAlarm"` to the clock; this helper unpacks them for passing to
+[`ocn_run_loop`](@ref). Returns the [`Clock`](@ref), the end-of-run
+[`OneTimeAlarm`](@ref), and the output [`PeriodicAlarm`](@ref).
+"""
 function ocn_init_alarms(Setup)
     clock = Setup.timeManager
 

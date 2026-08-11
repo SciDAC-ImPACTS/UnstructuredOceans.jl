@@ -372,6 +372,19 @@ function signIndexField!(dualMesh::DualCells, edges::Edges)
     @reset dualMesh.edgeSignOnVertex = edgeSignOnVertex
 end 
 
+"""
+    ReadHorzMesh(meshPath; backend=KernelAbstractions.CPU(),
+                 momentumDel2=0.0, rho=1000.0) -> HorzMesh
+
+Read an MPAS horizontal mesh from the NetCDF file at `meshPath` and return a
+[`HorzMesh`](@ref) with its arrays allocated on `backend`.
+
+Builds the primary cells, dual cells, and edges (including the boundary-edge
+mask, the wind-stress forcing projected onto edge normals, and the edge sign
+fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
+``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing), and
+`rho` is the reference density used to scale the wind forcing.
+"""
 function ReadHorzMesh(meshPath::String; backend=KA.CPU(),
                       momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
 

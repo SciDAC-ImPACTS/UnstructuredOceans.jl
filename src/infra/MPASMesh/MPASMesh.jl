@@ -16,10 +16,18 @@ import Adapt
 
 const KA = KernelAbstractions
 
+"""
+    Mesh(HorzMesh, VertMesh)
+
+The full model mesh, pairing a horizontal [`HorzMesh`](@ref) (TRiSK cells, edges,
+and dual vertices) with a [`VerticalMesh`](@ref) (levels and resting
+thicknesses). This is the geometry passed to the operators, tendencies, and time
+integrator. `Adapt.adapt` moves the whole mesh between host and device.
+"""
 struct Mesh{HM,VM}
     HorzMesh::HM
     VertMesh::VM
-    # inner constructor should check meshes are 
+    # inner constructor should check meshes are
     # on the same backend
 end
 

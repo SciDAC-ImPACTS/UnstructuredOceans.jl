@@ -1,7 +1,24 @@
 # define our parent abstract type
 abstract type timeStepper end
-# define the supported timeStepper types to dispatch on.
+
+"""
+    ForwardEuler <: timeStepper
+
+First-order explicit forward-Euler time integrator. Pass the type (not an
+instance) to [`ocn_timestep`](@ref) to select this scheme, or select it by
+configuration string via [`parse_integrator`](@ref) (`"ForwardEuler"`,
+`"euler"`).
+"""
 abstract type ForwardEuler <: timeStepper end
+
+"""
+    RungeKutta4 <: timeStepper
+
+Classical fourth-order explicit Runge–Kutta (RK4) time integrator. Pass the type
+(not an instance) to [`ocn_timestep`](@ref) to select this scheme, or select it
+by configuration string via [`parse_integrator`](@ref) (`"RungeKutta4"`,
+`"RK4"`). This is the default integrator used in the verification studies.
+"""
 abstract type RungeKutta4  <: timeStepper end
 
 """
@@ -73,6 +90,24 @@ end
     @synchronize()
 end
 
+"""
+    ocn_timestep(dt, Prog, Diag, Tend, Mesh, integrator;
+                 viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
+                 nthreads=DEFAULT_NTHREADS)
+
+Advance the prognostic state `Prog` in place by one step of size `dt`, using the
+time integrator type `integrator` ([`RungeKutta4`](@ref) or
+[`ForwardEuler`](@ref), passed as a type).
+
+Each step recomputes diagnostics with `diagnostic_compute!`, evaluates the
+normal-velocity and layer-thickness tendencies, and updates the state via
+KernelAbstractions kernels. `dt` is a length-1 device array of seconds; keeping
+it on-device (rather than a host `Float64`) is what lets the update kernels be
+differentiated by Enzyme. `viscDel2` is the Laplacian viscosity (defaulting to
+the value stored on the mesh edges); threading it explicitly enables
+forward-mode AD with respect to viscosity. `nthreads` sets the kernel workgroup
+size. Returns `nothing`.
+"""
 function ocn_timestep(dt,
                       Prog::PrognosticVars,
                       Diag::DiagnosticVars,

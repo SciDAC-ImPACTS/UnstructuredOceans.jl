@@ -39,6 +39,21 @@ end
     # @synchronize()
 end
 
+@doc raw"""
+    DivergenceOnCell!(DivCell, VecEdge, temp, Mesh; nthreads=DEFAULT_NTHREADS)
+
+Compute the TRiSK discrete divergence of an edge-normal vector field `VecEdge`,
+writing the per-cell result into `DivCell` (`temp` is edge-sized scratch):
+
+```math
+\left[ \nabla \cdot \bm{F} \right]_i = \frac{1}{A_i}
+    \sum_{e \in \mathrm{EC}(i)} n_{e,i}\, F_e\, l_e
+```
+
+The sum is over the edges of cell ``i``, with ``A_i`` the cell area, ``l_e`` the
+edge length, and ``n_{e,i}`` the edge sign. Launched as KernelAbstractions
+kernels on the backend of `DivCell`.
+"""
 function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(DivCell)
     @unpack HorzMesh, VertMesh = Mesh    
@@ -89,6 +104,20 @@ end
     # @synchronize()
 end
 
+@doc raw"""
+    GradientOnEdge!(grad, hᵢ, Mesh; workgroupsize=DEFAULT_NTHREADS)
+
+Compute the TRiSK discrete gradient of a cell-centered scalar `hᵢ`, writing the
+edge-normal result into `grad`:
+
+```math
+\left[ \nabla h \right]_e = \frac{h_{i_2(e)} - h_{i_1(e)}}{d_e}
+```
+
+where ``i_1(e), i_2(e)`` are the two cells adjacent to edge ``e`` and ``d_e`` the
+distance between their centers. Boundary edges are skipped. Launched as a
+KernelAbstractions kernel on the backend of `grad`.
+"""
 function GradientOnEdge!(grad, hᵢ, Mesh::Mesh; workgroupsize=DEFAULT_NTHREADS)
     backend = KA.get_backend(grad)
     @unpack HorzMesh, VertMesh = Mesh
@@ -145,6 +174,22 @@ end
     # @synchronize()
 end
 
+@doc raw"""
+    CurlOnVertex!(CurlVertex, VecEdge, Mesh; nthreads=DEFAULT_NTHREADS)
+
+Compute the TRiSK discrete curl (relative vorticity) of an edge-normal vector
+field `VecEdge` at dual-mesh vertices, writing the result into `CurlVertex`:
+
+```math
+\left[ \nabla \times \bm{v} \right]_v = \frac{1}{A_v}
+    \sum_{e \in \mathrm{EV}(v)} t_{e,v}\, v_e\, d_e
+```
+
+where the sum is over the edges meeting at vertex ``v``, ``A_v`` is the dual
+triangle area, ``d_e`` the cell-center distance, and ``t_{e,v}`` the edge sign.
+Missing (boundary) edges are guarded. Launched as a KernelAbstractions kernel on
+the backend of `CurlVertex`.
+"""
 function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh; nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(CurlVertex)
     @unpack HorzMesh, VertMesh = Mesh
@@ -208,7 +253,14 @@ end
     # @synchronize()
 end
 
-# Zeros out a vector along its entire length
+"""
+    ZeroOutVector!(vector, arrayLength)
+
+KernelAbstractions kernel that sets the first `arrayLength` entries of `vector`
+(along its second dimension) to zero. Used to clear tendency accumulators before
+summing contributions. Construct for a backend with
+`ZeroOutVector!(backend, nthreads)` and launch with an `ndrange`.
+"""
 @kernel function ZeroOutVector!(tendNormalVelocity, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1

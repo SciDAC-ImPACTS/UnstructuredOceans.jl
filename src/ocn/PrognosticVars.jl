@@ -3,6 +3,25 @@ using UnPack
 import Adapt
 #using MPAS_O: GlobalConfig, Mesh, ConfigGet, NCDataset
 
+"""
+    PrognosticVars
+
+The state variables advanced in time by the model. Each field is a `Vector` over
+time levels (typically two, the current and next step) so the integrator can hold
+successive states:
+
+- `ssh` — sea-surface height ``[\\mathrm{m}]``, dimensioned `(nCells,)` per level.
+- `normalVelocity` — edge-normal horizontal velocity ``[\\mathrm{m\\,s^{-1}}]``,
+  dimensioned `(nVertLevels, nEdges)` per level.
+- `layerThickness` — layer thickness ``[\\mathrm{m}]``, dimensioned
+  `(nVertLevels, nCells)` per level.
+
+Construct one from a config and [`Mesh`](@ref) with
+`PrognosticVars(config, mesh; backend=...)` (reads the initial state from the
+input stream), or directly from arrays. Arrays live on the requested
+KernelAbstractions backend; `Adapt.adapt` moves the whole struct between host and
+device. See [`ocn_init`](@ref).
+"""
 mutable struct PrognosticVars{F<:AbstractFloat, FV1 <: AbstractArray{F,1}, FV2 <: AbstractArray{F,2}, VFV1 <: AbstractVector{FV1}, VFV2 <: AbstractVector{FV2}}
     # var: sea surface height [m] 
     # dim: (nCells, Time)

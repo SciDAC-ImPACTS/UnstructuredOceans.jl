@@ -1,5 +1,20 @@
 import Adapt
 
+"""
+    VerticalMesh(mesh_fp, horzMesh; backend=KernelAbstractions.CPU())
+    VerticalMesh(horzMesh; nVertLevels=1, backend=KernelAbstractions.CPU())
+
+The vertical structure of the mesh: number of levels, the active-level index
+fields, and the resting layer thicknesses (`restingThickness` and its column sum
+`restingThicknessSum`, used to diagnose sea-surface height).
+
+The first constructor reads the vertical grid from an MPAS mesh file `mesh_fp`
+(paired with an already-read horizontal [`HorzMesh`](@ref)); the current
+implementation supports stacked meshes where every column is full-depth. The
+second constructor builds an `nVertLevels`-layer mesh from a horizontal mesh
+alone and is intended for unit tests on periodic meshes, not real simulations.
+`Adapt.adapt` moves the struct between host and device.
+"""
 mutable struct VerticalMesh{I, IV, FV, AL}
     nVertLevels::I
 

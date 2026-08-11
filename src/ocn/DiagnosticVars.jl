@@ -3,6 +3,23 @@ import Adapt
 using KernelAbstractions
 const KA = KernelAbstractions
 
+"""
+    DiagnosticVars
+
+Quantities recomputed from the [`PrognosticVars`](@ref) each timestep and reused
+across the tendency calculations:
+
+- `layerThicknessEdge` — layer thickness averaged from cell centers to edges
+  ``[\\mathrm{m}]``, dimensioned `(nVertLevels, nEdges)`.
+- `thicknessFlux` — thickness flux at edges, `(nVertLevels, nEdges)`.
+- `velocityDivCell` — divergence of horizontal velocity ``[\\mathrm{s^{-1}}]``,
+  `(nVertLevels, nCells)`.
+- `relativeVorticity` — curl of horizontal velocity ``[\\mathrm{s^{-1}}]``,
+  `(nVertLevels, nVertices)`.
+
+Construct with `DiagnosticVars(mesh; backend=...)`; `ocn_init` does this for you.
+The fields are filled by `diagnostic_compute!` inside [`ocn_timestep`](@ref).
+"""
 mutable struct DiagnosticVars{F <: AbstractFloat, FV2 <: AbstractArray{F,2}}
     
     # var: layer thickness averaged from cell centers to edges [m]

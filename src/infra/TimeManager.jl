@@ -1,8 +1,26 @@
-# abstract alarm type 
-abstract type AbstractAlarm end 
+# abstract alarm type
 
-# creat a ESMF clock like structure 
-mutable struct Clock 
+"""
+    AbstractAlarm
+
+Supertype for simulation alarms. See [`OneTimeAlarm`](@ref) and
+[`PeriodicAlarm`](@ref).
+"""
+abstract type AbstractAlarm end
+
+# creat a ESMF clock like structure
+"""
+    Clock(startTime::DateTime, timeStep::Period)
+
+An ESMF-style simulation clock tracking the current, previous, and next times and
+a dictionary of attached [`AbstractAlarm`](@ref)s.
+
+Advance it one `timeStep` with [`advance!`](@ref), which also updates every
+attached alarm's ringing status. Change the step with [`changeTimeStep!`](@ref).
+`ocn_init` builds the clock from the config and attaches the simulation-end and
+output alarms; retrieve them with [`ocn_init_alarms`](@ref).
+"""
+mutable struct Clock
 
     startTime::DateTime
     currTime::DateTime
@@ -39,6 +57,11 @@ function setCurrentTime!(clock::Clock, inCurrTime::DateTime)
     end
 end
 
+"""
+    changeTimeStep!(clock::Clock, timestep::Period)
+
+Set the clock's timestep to `timestep` and update its `nextTime` accordingly.
+"""
 function changeTimeStep!(clock::Clock, timestep::Period)
     # Assign the new time step to this clock
     clock.timeStep = timestep
@@ -51,8 +74,14 @@ function attachAlarm!(clock::Clock, alarm::AbstractAlarm)
     clock.alarms[alarm.name] = alarm
 end
 
+"""
+    advance!(clock::Clock)
+
+Advance the clock by one timestep, shifting the previous/current/next times and
+updating the ringing status of every attached alarm.
+"""
 function advance!(clock::Clock)
-    # Advance clock attributes by one timestep. 
+    # Advance clock attributes by one timestep.
     clock.prevTime = clock.currTime
     clock.currTime = clock.nextTime 
     clock.nextTime = clock.currTime + clock.timeStep
@@ -77,8 +106,14 @@ Base.show(io::IO, clock::Clock) =
 # Find out in the current code what alarms are used for to think about the 
 # type interface
 
+"""
+    OneTimeAlarm(name::String, alarmTime::DateTime)
+
+An alarm that rings once, at or after `alarmTime`. Used for the end-of-simulation
+alarm. Query it with [`isRinging`](@ref) and clear it with [`reset!`](@ref).
+"""
 mutable struct OneTimeAlarm{S,B,DT} <: AbstractAlarm
-    name::S       # name of the alarm 
+    name::S       # name of the alarm
 
     ringing::B      # alarm is currently ringing
     stopped::B      # alarm had been stopped and not reset
@@ -91,8 +126,15 @@ mutable struct OneTimeAlarm{S,B,DT} <: AbstractAlarm
 end 
 
 
-mutable struct PeriodicAlarm{S,B,DT,P} <: AbstractAlarm 
-    name::S                           # name of the alarm 
+"""
+    PeriodicAlarm(name::String, alarmInterval::Period, intervalStart::DateTime)
+
+An alarm that rings every `alarmInterval` starting one interval after
+`intervalStart`. Used to trigger periodic output. After it rings, [`reset!`](@ref)
+schedules the next ring time. Query it with [`isRinging`](@ref).
+"""
+mutable struct PeriodicAlarm{S,B,DT,P} <: AbstractAlarm
+    name::S                           # name of the alarm
 
     ringing::B                         # alarm is currently ringing
     stopped::B                          # alarm had been stopped and not reset
@@ -119,7 +161,13 @@ Alarm(name::String, alarmTime::DateTime) = OneTimeAlarm(name, alarmTime)
 Alarm(name::String, alarmInterval::Period, intervalStart::DateTime) = 
     PeriodicAlarm(name, alarmInterval, intervalStart)
 
-# Methods that work for all types of alarms 
+# Methods that work for all types of alarms
+"""
+    isRinging(alarm::AbstractAlarm) -> Bool
+
+Return `true` if `alarm` is currently ringing. The run loop polls the
+simulation-end and output alarms with this each step.
+"""
 function isRinging(alarm::AbstractAlarm)
     return alarm.ringing
 end
@@ -136,10 +184,21 @@ function stop!(alarm::AbstractAlarm)
     alarm.ringing = false 
 end
 
-# Methods that have type specific behavior 
+# Methods that have type specific behavior
+"""
+    reset!(alarm::OneTimeAlarm)
+    reset!(alarm::OneTimeAlarm, inTime::DateTime)
+    reset!(alarm::PeriodicAlarm)
+    reset!(alarm::PeriodicAlarm, inTime::DateTime)
+
+Stop a ringing alarm. For a [`OneTimeAlarm`](@ref) this simply clears the ringing
+flag (optionally rescheduling to `inTime`). For a [`PeriodicAlarm`](@ref) it also
+advances the ring time by one interval (or past `inTime`), so the next interval
+will ring.
+"""
 function reset!(alarm::OneTimeAlarm)
     stop!(alarm)
-    alarm.stopped = true 
+    alarm.stopped = true
 end
 
 function reset!(alarm::OneTimeAlarm, inTime::DateTime)

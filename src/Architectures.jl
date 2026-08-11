@@ -7,9 +7,31 @@ import KernelAbstractions as KA
 # in the second 32-wide warp. Every kernel-launching function takes an `nthreads`
 # keyword defaulting to this, so it can be tuned per call/architecture without editing
 # the launch sites. See the benchmark rationale in kernel_benchmark.jl.
+"""
+    DEFAULT_NTHREADS
+
+Default KernelAbstractions workgroup size (threads per group), `64`, used by every
+compute-kernel launch unless overridden via each launcher's `nthreads` keyword.
+It is a warp/wavefront multiple (2× NVIDIA's 32, an even divisor of AMD's 64) so
+no lanes sit idle.
+"""
 const DEFAULT_NTHREADS = 64
 
+"""
+    AbstractArchitecture
+
+Supertype for the compute architectures MOKA runs on. Concrete subtypes are
+[`CPU`](@ref) and [`GPU`](@ref); use [`device`](@ref) to obtain the corresponding
+KernelAbstractions backend.
+"""
 abstract type AbstractArchitecture end
+
+"""
+    AbstractSerialArchitecture <: AbstractArchitecture
+
+Supertype for single-node (non-distributed) architectures — the ones currently
+supported, [`CPU`](@ref) and [`GPU`](@ref).
+"""
 abstract type AbstractSerialArchitecture <: AbstractArchitecture end
 
 """
@@ -29,7 +51,14 @@ struct GPU{D} <: AbstractSerialArchitecture
     device :: D
 end
 
-# Bridge to the KA.Backend runtime
+"""
+    device(arch::AbstractArchitecture)
+
+Return the KernelAbstractions backend for `arch`: `KernelAbstractions.CPU()` for
+[`CPU`](@ref), or the stored device backend for a [`GPU`](@ref). This backend is
+what gets passed as the `backend` keyword to [`ocn_init`](@ref) and the array
+constructors.
+"""
 device(::CPU) = KA.CPU()
 device(a::GPU) = a.device
 
@@ -57,14 +86,34 @@ set_ad_device_heap!(::CPU; bytes::Integer = 0) = nothing
 synchronize(::CPU) = KA.synchronize(KA.CPU())
 synchronize(a::AbstractArchitecture) = KA.synchronize(a.device)
 
+"""
+    architecture(x)
+
+Infer the [`AbstractArchitecture`](@ref) that an array (or array-like) `x` lives
+on. Returns [`CPU`](@ref)`()` for a host `Array`, and `nothing` for scalars.
+GPU array types register their own methods in the vendor extensions.
+"""
 architecture() = nothing
 architecture(::Number) = nothing
 architecture(::Array) = CPU()
 architecture(a::SubArray) = architecture(parent(a))
 
+"""
+    array_type(arch::AbstractArchitecture)
+
+Return the array type used on `arch` (`Array` for [`CPU`](@ref); the device array
+type for a [`GPU`](@ref), registered by the vendor extension).
+"""
 array_type(::CPU) = Array
 
-# Fallback: pass through
+"""
+    on_architecture(arch, x)
+
+Move `x` (an array, tuple, or named tuple of arrays) onto architecture `arch`,
+returning host arrays for [`CPU`](@ref) and device arrays for a [`GPU`](@ref).
+Values already on the target (or that need no transfer, e.g. ranges) are passed
+through unchanged.
+"""
 on_architecture(arch, a) = a
 
 # Back-compat: raw KA.Backend form used in test/ocn/test_GPU.jl
