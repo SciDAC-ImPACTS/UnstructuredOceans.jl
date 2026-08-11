@@ -47,6 +47,14 @@ Key options:
 - **Viscosity** — `hmix_del2.config_mom_del2` sets ``\nu_2``; it is read by
   [`read_horz_mesh`](@ref) and stored on the mesh edges. Omit the section (or set
   `config_use_mom_del2: false`) to disable lateral mixing.
+- **Wind forcing** — `forcing.config_use_bulk_wind_stress` (default `true`) gates
+  the wind-stress term. Set it `false` to run without wind: the forcing is then
+  left zero at mesh-build time, so the differentiated timestep path is unchanged.
+- **Physical constants** — an optional `constants` section overrides the defaults
+  built into the [`Constants`](@ref) carried on the [`Mesh`](@ref):
+  `config_gravity` (``g``, default `9.80616`) and `config_density` (``\rho_0``,
+  default `1000.0`). Both are stored as 1-element device arrays so kernels read
+  them without breaking Enzyme AD. Omit the section to keep the defaults.
 
 ## Streams section
 

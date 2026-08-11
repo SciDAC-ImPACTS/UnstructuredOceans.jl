@@ -74,25 +74,63 @@ function ocn_init_shadows(Prog, Diag, Tend; backend=KA.CPU())
 end
 
 
+# Default physical constants; overridable via the config `constants` section.
+const DEFAULT_GRAVITY = 9.80616   # [m s^-2]
+const DEFAULT_DENSITY = 1000.0    # [kg m^-3]
+
+"""
+    ocn_build_constants(Config) -> Constants
+
+Read the optional `constants` namelist section and build the physical
+[`Constants`](@ref) (gravity, density), falling back to `DEFAULT_GRAVITY` /
+`DEFAULT_DENSITY` when the section or a key is absent.
+"""
+function ocn_build_constants(Config::GlobalConfig)
+    gravity = DEFAULT_GRAVITY
+    density = DEFAULT_DENSITY
+    if config_has(Config.namelist, "constants")
+        c = config_get(Config.namelist, "constants")
+        gravity = Float64(config_get(c, "config_gravity", DEFAULT_GRAVITY))
+        density = Float64(config_get(c, "config_density", DEFAULT_DENSITY))
+    end
+    return (gravity=gravity, density=density)
+end
+
 function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
     meshConfig = config_get(Config.streams, "mesh")
     mesh_fp = config_get(meshConfig, "filename_template")
 
-    # read del2 momentum viscosity; default 0 (no mixing) if section absent
+    # host scalars from config, then the device-array Constants struct.
+    consts    = ocn_build_constants(Config)
+    density   = consts.density   # scales wind forcing on the edges (was 1000.0)
+    constants = Constants(; gravity=consts.gravity, density=density, backend=backend)
+
+    # read del2 momentum viscosity; default 0 (no mixing) if section absent or the
+    # term is switched off via config_use_mom_del2.
     momentumDel2 = 0.0
-    if haskey(Config.namelist.dict, "hmix_del2")
+    if config_has(Config.namelist, "hmix_del2")
         hmixConfig = config_get(Config.namelist, "hmix_del2")
-        if haskey(hmixConfig.dict, "config_mom_del2")
+        if config_get(hmixConfig, "config_use_mom_del2", true) &&
+           config_has(hmixConfig, "config_mom_del2")
             momentumDel2 = Float64(config_get(hmixConfig, "config_mom_del2"))
         end
     end
 
+    # wind-stress forcing gate: config_use_bulk_wind_stress in the forcing section
+    # (default on for backwards compatibility with configs that omit it).
+    use_wind_stress = true
+    if config_has(Config.namelist, "forcing")
+        forcingConfig = config_get(Config.namelist, "forcing")
+        use_wind_stress = Bool(config_get(forcingConfig, "config_use_bulk_wind_stress", true))
+    end
+
     h_mesh = read_horz_mesh(mesh_fp; backend=backend,
-                          momentumDel2=momentumDel2, rho=1000.0)
+                          momentumDel2=momentumDel2, rho=density,
+                          use_wind_stress=use_wind_stress)
     v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
 
-    return Mesh(h_mesh, v_mesh)
-end 
+    return Mesh(h_mesh, v_mesh, constants)
+end
 
 function ocn_setup_clock(Config::GlobalConfig)
 

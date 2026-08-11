@@ -40,20 +40,46 @@ can be used to create a new instance if string
 corresponds to header, not a config option. 
 """
 function config_get(d::C, s::String) where {C<:yaml_config}
-    
+
+    # Friendly error on a missing key instead of a bare KeyError, listing the
+    # available keys at this level (helps catch typos / missing sections).
+    if !haskey(d.dict, s)
+        keys_str = join(sort!(string.(collect(keys(d.dict)))), ", ")
+        error("config_get: key \"$s\" not found. Available keys: [$keys_str]")
+    end
+
     # access the underlying dictionary contained within the object
-    # and use key (string) to get config info 
+    # and use key (string) to get config info
     c = d.dict[s]
-    
-    # if a dictionary is returned that means we have reached the bottom 
-    # level of the yaml tree, instead return a new instance of the 
-    # configuration struct. 
+
+    # if a dictionary is returned that means we have reached the bottom
+    # level of the yaml tree, instead return a new instance of the
+    # configuration struct.
     if typeof(c) == dict_type
-        return C(c) 
+        return C(c)
     else
         return c
     end
 end
+
+"""
+    config_get(d, key, default)
+
+Return the config value for `key`, or `default` if the key is absent. Use for
+optional settings so a missing key yields a documented default rather than an
+error. (The two-argument [`config_get`](@ref) errors on a missing key.)
+"""
+function config_get(d::C, s::String, default) where {C<:yaml_config}
+    haskey(d.dict, s) || return default
+    return config_get(d, s)
+end
+
+"""
+    config_has(d, key) -> Bool
+
+Whether `key` exists at this config level. Thin wrapper over the underlying dict.
+"""
+config_has(d::C, s::String) where {C<:yaml_config} = haskey(d.dict, s)
 
 """ Method for adding a new configuration option (and value)
 """

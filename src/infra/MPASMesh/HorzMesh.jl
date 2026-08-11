@@ -256,7 +256,8 @@ function read_dual_mesh(ds)
               areaTriangle = areaTriangle)
 end 
 
-function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
+                        use_wind_stress::Bool = true)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
@@ -295,9 +296,13 @@ function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
     # boundary mask: 1 if either neighbour cell is missing (index 0)
     boundaryEdge = Int32.(vec(any(cellsOnEdge .== 0; dims=1)))
 
-    # project wind stress onto edge normals; default to zero if fields absent
+    # project wind stress onto edge normals; default to zero if fields absent or
+    # the term is switched off (config_use_bulk_wind_stress=false). Gating here —
+    # leaving windForcingEdge all zeros — makes the wind-forcing tendency a no-op
+    # without touching the differentiated ocn_timestep path (same strategy as
+    # momentumDel2=0 disabling mixing).
     float_type = eltype(xᵉ)
-    if haskey(ds, "windStressZonal") && haskey(ds, "windStressMeridional")
+    if use_wind_stress && haskey(ds, "windStressZonal") && haskey(ds, "windStressMeridional")
         τz_c = float_type.(ds["windStressZonal"][:,1])
         τm_c = float_type.(ds["windStressMeridional"][:,1])
         windForcingEdge = zeros(float_type, nEdges)
@@ -384,15 +389,18 @@ mask, the wind-stress forcing projected onto edge normals, and the edge sign
 fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
 ``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing), and
 `rho` is the reference density used to scale the wind forcing.
+`use_wind_stress=false` leaves the wind forcing zero (disables the wind term).
 """
 function read_horz_mesh(meshPath::String; backend=KA.CPU(),
-                      momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+                      momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0,
+                      use_wind_stress::Bool = true)
 
     ds = NCDataset(meshPath, "r", format=:netcdf4)
 
     PrimaryMesh = read_primary_mesh(ds)
     DualMesh    = read_dual_mesh(ds)
-    edges       = read_edge_info(ds; momentumDel2 = momentumDel2, rho = rho)
+    edges       = read_edge_info(ds; momentumDel2 = momentumDel2, rho = rho,
+                                 use_wind_stress = use_wind_stress)
     
     # set the edge sign on cells (primary mesh)
     sign_index_field!(PrimaryMesh, edges)

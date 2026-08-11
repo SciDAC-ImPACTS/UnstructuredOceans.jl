@@ -6,7 +6,7 @@ module MOKA
     export Clock, OneTimeAlarm, PeriodicAlarm
 
     # MPASMesh
-    export VerticalMesh, read_horz_mesh, Mesh, HorzMesh,
+    export VerticalMesh, read_horz_mesh, Mesh, HorzMesh, Constants,
            Cell, Edge, Vertex
 
     # Operators
