@@ -43,8 +43,8 @@
 #   RES_BENCH_CUDA_DEVICE=1       # CUDA device index (default 1)
 #   RES_BENCH_AMD_DEVICE=1        # AMD/ROCm device index (default 1)
 #   RES_BENCH_RES=40km,20km       # subset/order of resolutions to sweep
-#   RES_BENCH_FWD_NSTEPS=8        # forward steps per resolution (default 8)
-#   RES_BENCH_INTEGRATOR=RK4      # or ForwardEuler (default ForwardEuler)
+#   RES_BENCH_FWD_NSTEPS=8        # forward steps per resolution; comma list = horizon sweep (default 8)
+#   RES_BENCH_INTEGRATOR=RK4      # force one integrator; unset = read each config's config_time_integrator
 #   RES_BENCH_SAMPLES=5           # timed samples per case (default 5)
 #   RES_BENCH_SECONDS=600         # BenchmarkTools time budget per case (default 600)
 #   RES_BENCH_CSV=/path/out.csv   # output CSV (default: next to this script)
@@ -66,7 +66,9 @@ using Printf
 # GPUArraysCore's vendor-agnostic version, so it works for CuArray and ROCArray.
 include(joinpath(@__DIR__, "resolution_scaling_common.jl"))
 
-const FWD_NSTEPS = parse(Int, get(ENV, "RES_BENCH_FWD_NSTEPS", "8"))
+# A comma list runs a horizon sweep (one row per step count); a single value keeps the
+# original single-horizon behaviour.
+const FWD_NSTEPS = parse.(Int, split(get(ENV, "RES_BENCH_FWD_NSTEPS", "8"), ','))
 
 # --- Forward case: init once, then (reset!, run!) per sample ---------------------
 function setup_forward(dir, config, nsteps, backend)
@@ -75,12 +77,16 @@ function setup_forward(dir, config, nsteps, backend)
     clock, simAlarm, outAlarm = ocn_init_alarms(Setup)
     set_nsteps!(clock, simAlarm, nsteps)
 
+    integrator = case_integrator(Setup)   # config-driven unless RES_BENCH_INTEGRATOR set
+    dt_s       = _dt_seconds(Setup)
+
     timestep = KA.zeros(backend, Float64, (1,))
     sumGPU   = KA.zeros(backend, Float64, (1,))
-    @allowscalar timestep[1] = _dt_seconds(Setup)
+    @allowscalar timestep[1] = dt_s
 
     return (; Prog, Diag, Tend, Mesh = Setup.mesh,
               clock, simAlarm, outAlarm, timestep, sumGPU, nsteps, backend,
+              integrator, dt_s,
               snap = snapshot_prog(Prog), outAlarmSaved = save_fields(outAlarm),
               ncells = length(Prog.ssh[end]))
 end
@@ -103,7 +109,7 @@ end
 # row carries a finite loss.
 function run_forward!(st)
     ocn_run_loop(st.sumGPU, st.timestep, st.Prog, st.Diag, st.Tend, st.Mesh,
-                 INTEGRATOR, st.clock, st.simAlarm, st.outAlarm)
+                 st.integrator, st.clock, st.simAlarm, st.outAlarm)
     KA.synchronize(st.backend)
     return @allowscalar st.sumGPU[1]
 end

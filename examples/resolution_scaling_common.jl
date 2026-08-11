@@ -99,19 +99,64 @@ end
 # dominate the runtime plots. The CPU is still available on request via
 # RES_BENCH_BACKENDS (e.g. =CUDA,CPU or =CPU) for a one-off cross-check.
 function selected_backends()
-    available = copy(GPU_BACKENDS)
-    push!(available, "CUDA" => CUDA.CUDABackend(), "AMD" => AMDGPU.ROCBackend(), "CPU" => KA.CPU())
     if !haskey(ENV, "RES_BENCH_BACKENDS")
         # Default: all detected GPUs, no CPU.
         return copy(GPU_BACKENDS)
     end
+    # Only the GPU vendors that actually imported are in GPU_BACKENDS; the CPU is
+    # always constructible. Referencing CUDA/AMDGPU directly here would throw
+    # UndefVarError on a box where that vendor package failed its guarded import,
+    # so build the menu from GPU_BACKENDS (+ CPU) instead.
+    available = copy(GPU_BACKENDS)
+    push!(available, "CPU" => KA.CPU())
     want = split(ENV["RES_BENCH_BACKENDS"], ',')
     return filter(p -> first(p) in want, available)
 end
 
-const INTEGRATOR = parse_integrator(get(ENV, "RES_BENCH_INTEGRATOR", "ForwardEuler"))
+# Integrator selection is CONFIG-DRIVEN by default: each case uses whatever its own
+# config's `config_time_integrator` specifies (so the resolution sweep times the SAME
+# integrator the model — and the per-kernel benchmark — actually run, rather than a
+# hardcoded default that ignores the config). RES_BENCH_INTEGRATOR overrides every case
+# with one integrator when set (e.g. to force a ForwardEuler-vs-RK4 comparison).
+const INTEGRATOR_OVERRIDE = haskey(ENV, "RES_BENCH_INTEGRATOR") ?
+    parse_integrator(ENV["RES_BENCH_INTEGRATOR"]) : nothing
+
+# Read the integrator a config asks for (mirrors src/driver/mpas_ocean.jl) unless the
+# env override is in force. `Setup` is the ocn_init return, whose config.namelist holds
+# the time_integration group.
+function case_integrator(Setup)
+    INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
+    ti = MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+                        "config_time_integrator")
+    return parse_integrator(ti)
+end
+
+# Same, but from a config file path WITHOUT ocn_init — a plain YAML read that does not
+# touch the GPU context. The AD heap hook needs the integrator (to size the reverse tape)
+# before ocn_init, since cuCtxSetLimit(MALLOC_HEAP_SIZE) fails once the context is in use.
+function config_integrator(dir, config)
+    INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
+    cfg = MOKA.ConfigRead(joinpath(dir, config))
+    ti  = MOKA.ConfigGet(MOKA.ConfigGet(cfg.namelist, "time_integration"),
+                         "config_time_integrator")
+    return parse_integrator(ti)
+end
+
 const SAMPLES    = parse(Int, get(ENV, "RES_BENCH_SAMPLES", "5"))
 const SECONDS    = parse(Float64, get(ENV, "RES_BENCH_SECONDS", "600"))
+
+# --- Provenance ------------------------------------------------------------------
+# Stamp each row with the code version, Julia version, and thread count so a CSV row is
+# self-describing (the schema has drifted before; rows must say which code produced them).
+# The git short-hash is best-effort — a tarball checkout with no .git still benchmarks,
+# it just records "unknown".
+const GIT_COMMIT = try
+    readchomp(`git -C $(@__DIR__) rev-parse --short HEAD`)
+catch
+    "unknown"
+end
+const JULIA_VERSION_STR = string(VERSION)
+const NTHREADS = Threads.nthreads()
 
 # Override the simulation-end alarm so the run stops after exactly `nsteps` steps.
 # advance! increments currTime by one timeStep per iteration and the alarm rings on
@@ -159,13 +204,12 @@ end
 # beforehand pays all Julia/Enzyme/CUDA compilation, so samples measure pure
 # steady-state runtime. `run!` must return the scalar loss. Returns (trial, ncells,
 # loss).
-function benchmark_case(setup_fn, reset!, run!, dir, config, nsteps, backend)
-    st = setup_fn(dir, config, nsteps, backend)
+function benchmark_case(reset!, run!, st)
     reset!(st)
     loss = run!(st)                      # warm-up: JIT compile, untimed
     bench = @benchmarkable $run!($st) setup = ($reset!($st)) evals = 1 samples = SAMPLES seconds = SECONDS
     trial = run(bench)
-    return trial, st.ncells, loss
+    return trial, loss
 end
 
 seconds_stats(trial) = (min    = minimum(trial).time / 1e9,
@@ -218,33 +262,44 @@ end
 # The output path defaults to `csv_name` next to this script but can be redirected with
 # RES_BENCH_CSV — e.g. to a shared scratch path that every node's job appends to, or to
 # a per-node file to avoid concurrent writers.
+# `nsteps` may be a single Int or a Vector{Int} (a horizon sweep): every resolution is
+# timed at each requested step count, one CSV row per (backend, resolution, nsteps). This
+# is how the AD benchmark folds in the former ad_runtime_benchmark.jl horizon axis.
 function run_sweep(; mode, nsteps, setup_fn, reset!, run!, csv_name,
                      per_backend_hook = (backend, resolutions) -> nothing)
     backends    = selected_backends()
     resolutions = selected_resolutions()
+    horizons    = nsteps isa AbstractVector ? collect(nsteps) : [nsteps]
     stamp       = Dates.format(Dates.now(Dates.UTC), "yyyy-mm-ddTHH:MM:SSZ")
 
     rows = Vector{Any}[]
     for (bname, backend) in backends
         per_backend_hook(backend, resolutions)
         device = device_label(bname)
-        println("\n=== [$bname] mode=$mode  integrator=$(INTEGRATOR)  nsteps=$nsteps  samples=$SAMPLES  host=$HOSTNAME  device=$device ===")
+        println("\n=== [$bname] mode=$mode  nsteps=$(horizons)  samples=$SAMPLES  host=$HOSTNAME  device=$device  commit=$GIT_COMMIT  julia=$JULIA_VERSION_STR  nthreads=$NTHREADS ===")
 
         for res in resolutions
-            print("  [$(res.name)] init + warm-up + $SAMPLES samples... "); flush(stdout)
-            trial, ncells, loss = try
-                benchmark_case(setup_fn, reset!, run!, res.dir, res.config, nsteps, backend)
-            catch err
-                println("FAILED: $(sprint(showerror, err))")
-                continue
+            for n in horizons
+                print("  [$(res.name)] nsteps=$n  init + warm-up + $SAMPLES samples... "); flush(stdout)
+                result = try
+                    st = setup_fn(res.dir, res.config, n, backend)
+                    trial, loss = benchmark_case(reset!, run!, st)
+                    (; trial, loss, st.ncells, st.dt_s,
+                       integrator = string(nameof(st.integrator)),
+                       nsnaps = get(st, :nsnaps, 0))
+                catch err
+                    println("FAILED: $(sprint(showerror, err))")
+                    continue
+                end
+                s = seconds_stats(result.trial)
+                @printf("done\n  [%-5s] ncells=%7d  nsteps=%4d  min=%9.4fs  median=%9.4fs  (%.4f s/step, n=%d)  loss=%.6e\n",
+                        res.name, result.ncells, n, s.min, s.median, s.min / n, s.n, result.loss)
+                push!(rows, Any[HOSTNAME, device, stamp, GIT_COMMIT, JULIA_VERSION_STR, NTHREADS,
+                                PROBLEM, res.name, bname, mode, result.integrator,
+                                result.ncells, result.dt_s, n, result.nsnaps, s.n,
+                                s.min, s.min / n, s.median, s.mean, s.std, result.loss])
+                GC.gc()
             end
-            s = seconds_stats(trial)
-            @printf("done\n  [%-5s] ncells=%7d  min=%9.4fs  median=%9.4fs  (%.4f s/step, n=%d)  loss=%.6e\n",
-                    res.name, ncells, s.min, s.median, s.min / nsteps, s.n, loss)
-            push!(rows, Any[HOSTNAME, device, stamp, PROBLEM, res.name, bname, mode,
-                            ncells, nsteps, s.n,
-                            s.min, s.min / nsteps, s.median, s.mean, s.std, loss])
-            GC.gc()
         end
     end
 
@@ -252,8 +307,10 @@ function run_sweep(; mode, nsteps, setup_fn, reset!, run!, csv_name,
 
     # runtime_s / s_per_step are the MINIMUM over samples (the standard BenchmarkTools
     # estimator: least noise-contaminated); median/mean/std are also recorded. host/
-    # device/timestamp identify which node+GPU produced each row (appended-file safe).
-    header = ["host" "device" "timestamp" "problem" "res" "backend" "mode" "ncells" "nsteps" "samples" "runtime_s" "s_per_step" "median_s" "mean_s" "std_s" "loss"]
+    # device/timestamp/commit/julia/nthreads identify which node+GPU+code produced each
+    # row (appended-file safe). integrator/dt_s/nsnaps make each row self-describing:
+    # which time-stepper, timestep, and (AD) checkpoint count it actually used.
+    header = ["host" "device" "timestamp" "commit" "julia" "nthreads" "problem" "res" "backend" "mode" "integrator" "ncells" "dt_s" "nsteps" "nsnaps" "samples" "runtime_s" "s_per_step" "median_s" "mean_s" "std_s" "loss"]
     out    = get(ENV, "RES_BENCH_CSV", joinpath(@__DIR__, csv_name))
     append_rows!(out, header, rows)
     println("\nAppended $(length(rows)) row(s) to $out")

@@ -37,17 +37,24 @@ const FWD_PNG = joinpath(@__DIR__, "resolution_scaling_benchmark.png")
 const AD_PNG  = joinpath(@__DIR__, "resolution_scaling_ad_benchmark.png")
 
 # Pull the columns we plot out of one CSV; returns empty vectors if it is absent.
+# Tolerant of older schemas: `problem`, `device`, and `nsteps` all have fallbacks so a
+# pre-provenance CSV still plots (device→"unknown", nsteps→1).
 function load_csv(path)
-    isfile(path) || return (backend = String[], mode = String[],
-                            ncells = Float64[], sstep = Float64[], problem = String[])
+    isfile(path) || return (backend = String[], device = String[], mode = String[],
+                            ncells = Float64[], sstep = Float64[], nsteps = Float64[],
+                            problem = String[])
     raw, header = readdlm(path, ',', header=true)
     header = vec(header)
+    n = size(raw, 1)
     col(name) = raw[:, findfirst(==(name), header)]
+    has(name) = name in header
     # CSVs written before the `problem` column was added default to the IGW.
-    problem = "problem" in header ? string.(col("problem")) : fill("igw", size(raw, 1))
-    return (backend = string.(col("backend")), mode = string.(col("mode")),
+    problem = has("problem") ? string.(col("problem")) : fill("igw", n)
+    device  = has("device")  ? string.(col("device"))  : fill("unknown", n)
+    nsteps  = has("nsteps")  ? Float64.(col("nsteps")) : fill(1.0, n)
+    return (backend = string.(col("backend")), device = device, mode = string.(col("mode")),
             ncells = Float64.(col("ncells")), sstep = Float64.(col("s_per_step")),
-            problem = problem)
+            nsteps = nsteps, problem = problem)
 end
 
 fwd = load_csv(FWD_CSV)
@@ -70,12 +77,51 @@ bmarker   = Dict("CUDA" => :circle, "AMD" => :diamond, "GPU" => :circle, "CPU" =
 bcolor    = Dict("CUDA" => :dodgerblue3, "AMD" => :firebrick3, "GPU" => :dodgerblue3,
                  "CPU" => :darkorange2)
 
-# Helper: sorted (x, y) for a backend selection within one dataset.
+# Helper: sorted (x, y) for a backend selection within one dataset. The CSV is
+# append-mode and may hold several rows for the same (backend, ncells) — repeat runs
+# or multiple HPC nodes sharing one backend name — so collapse duplicates to the MIN
+# s/step (the standard low-noise estimator), giving one point per cell count.
+#
+# Device-aware: a backend LABEL ("CUDA") can span physically different cards across HPC
+# nodes. Silently taking the min then mixes hardware. We still collapse to one point per
+# cell count (so the curve stays readable) but WARN when a collapse spans distinct device
+# strings, so a mixed-hardware plot is never mistaken for a single-machine result. Filter
+# to one device up front (RES_PLOT_DEVICE=<string>) to plot a single card cleanly.
+const PLOT_DEVICE = get(ENV, "RES_PLOT_DEVICE", "")
+
 function series(data, b)
     idx = data.backend .== b
-    x = data.ncells[idx]; y = data.sstep[idx]
-    o = sortperm(x)
-    return x[o], y[o]
+    isempty(PLOT_DEVICE) || (idx = idx .& (data.device .== PLOT_DEVICE))
+    x = data.ncells[idx]; y = data.sstep[idx]; dev = data.device[idx]
+    best   = Dict{Float64,Float64}()
+    devs   = Dict{Float64,Set{String}}()
+    for (xi, yi, di) in zip(x, y, dev)
+        best[xi] = haskey(best, xi) ? min(best[xi], yi) : yi
+        push!(get!(devs, xi, Set{String}()), di)
+    end
+    mixed = [xi for (xi, s) in devs if length(s) > 1]
+    isempty(mixed) || @warn "backend $b: min-collapsed across multiple devices at some \
+        cell counts — plotted point is the fastest card, not one machine. Set \
+        RES_PLOT_DEVICE to pin one." devices = union(values(devs)...)
+    xs = sort(collect(keys(best)))
+    return xs, [best[xi] for xi in xs]
+end
+
+# Filter a dataset to the rows matching a single step count. The scaling panels plot
+# s/step vs N, which is only apples-to-apples at ONE horizon (checkpointed AD's per-step
+# cost varies with nsteps). When a CSV holds a horizon sweep (folded-in ad_runtime axis),
+# pin the largest nsteps (best steady-state per-step estimate) unless RES_PLOT_NSTEPS asks
+# for another. Returns (filtered_data, chosen_nsteps).
+function pin_horizon(data)
+    horizons = sort(unique(data.nsteps))
+    length(horizons) <= 1 && return data, (isempty(horizons) ? nothing : first(horizons))
+    want = haskey(ENV, "RES_PLOT_NSTEPS") ? parse(Float64, ENV["RES_PLOT_NSTEPS"]) :
+           maximum(horizons)
+    idx  = data.nsteps .== want
+    filt = (backend = data.backend[idx], device = data.device[idx], mode = data.mode[idx],
+            ncells = data.ncells[idx], sstep = data.sstep[idx], nsteps = data.nsteps[idx],
+            problem = data.problem[idx])
+    return filt, want
 end
 
 # Row selection for a single problem within one dataset (returns the same named
@@ -105,6 +151,9 @@ end
 set_theme!(fontsize = 18)
 function plot_case(data, label, png)
     isempty(data.mode) && (println("skip $label — no data"); return)
+
+    data, horizon = pin_horizon(data)
+    label = horizon === nothing ? label : "$label, nsteps=$(Int(horizon))"
 
     probname = probname_of(first(data.problem))
     uniq_backends = unique(data.backend)

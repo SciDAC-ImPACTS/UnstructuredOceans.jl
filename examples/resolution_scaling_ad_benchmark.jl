@@ -42,8 +42,9 @@
 #   RES_BENCH_CUDA_DEVICE=1       # CUDA device index (default 1)
 #   RES_BENCH_AMD_DEVICE=1        # AMD/ROCm device index (default 1)
 #   RES_BENCH_RES=40km,20km       # subset/order of resolutions to sweep
-#   RES_BENCH_AD_NSTEPS=4         # AD steps per resolution (default 4)
-#   RES_BENCH_INTEGRATOR=RK4      # or ForwardEuler (default ForwardEuler)
+#   RES_BENCH_AD_NSTEPS=4         # AD steps per resolution; comma list = horizon sweep (default 4)
+#   RES_BENCH_AD_NSNAPS=4         # Revolve checkpoints, fixed across the horizon sweep (default 4)
+#   RES_BENCH_INTEGRATOR=RK4      # force one integrator; unset = read each config's config_time_integrator
 #   RES_BENCH_SAMPLES=5           # timed samples per case (default 5)
 #   RES_BENCH_SECONDS=600         # BenchmarkTools time budget per case (default 600)
 #   RES_BENCH_CSV=/path/out.csv   # output CSV (default: next to this script)
@@ -67,7 +68,16 @@ using Printf
 # GPUArraysCore's vendor-agnostic version, so it works for CuArray and ROCArray.
 include(joinpath(@__DIR__, "resolution_scaling_common.jl"))
 
-const AD_NSTEPS = parse(Int, get(ENV, "RES_BENCH_AD_NSTEPS", "4"))
+# A comma list runs a horizon sweep (one row per step count) — this folds in the former
+# ad_runtime_benchmark.jl axis, e.g. RES_BENCH_AD_NSTEPS=1,2,4,8,16,32,64. A single value
+# keeps the original single-horizon behaviour (default 4).
+const AD_NSTEPS = parse.(Int, split(get(ENV, "RES_BENCH_AD_NSTEPS", "4"), ','))
+
+# Revolve checkpoint count, held FIXED across the horizon sweep so the checkpointing
+# regime (and hence per-step cost) is the same at every step count — otherwise nsteps=1,2
+# would store-all while nsteps=64 recomputes, and the per-step curve would compare two
+# different algorithms. Clamped per-case to [1, nsteps]. Override with RES_BENCH_AD_NSNAPS.
+const AD_NSNAPS = parse(Int, get(ENV, "RES_BENCH_AD_NSNAPS", "4"))
 
 # Enzyme's reverse tape lives in the CUDA in-kernel malloc heap and scales with the
 # mesh (it scatters over nEdges × nEdgesOnEdge — see set_ad_device_heap! docstring)
@@ -101,8 +111,11 @@ function setup_ad(dir, config, nsteps, backend)
     cd(dir)
     Setup, Diag, Tend, Prog = ocn_init(config; backend=backend)
 
+    integrator = case_integrator(Setup)   # config-driven unless RES_BENCH_INTEGRATOR set
+    dt_s       = _dt_seconds(Setup)
+
     timestep = KA.zeros(backend, Float64, (1,))
-    @allowscalar timestep[1] = _dt_seconds(Setup)
+    @allowscalar timestep[1] = dt_s
 
     Mesh = Setup.mesh
 
@@ -112,18 +125,20 @@ function setup_ad(dir, config, nsteps, backend)
 
     # Bundle the differentiated state so Checkpointing.jl can snapshot it; the
     # shadow zeroes Prog/Diag/Tend/dt and aliases the (inactive) Mesh.
-    model   = OceanModel(INTEGRATOR, Prog, Diag, Tend, Mesh, timestep)
-    d_model = OceanModel(INTEGRATOR,
+    model   = OceanModel(integrator, Prog, Diag, Tend, Mesh, timestep)
+    d_model = OceanModel(integrator,
                          Enzyme.make_zero(Prog),
                          Enzyme.make_zero(Diag),
                          Enzyme.make_zero(Tend),
                          Mesh,
                          Enzyme.make_zero(timestep))
 
-    # Revolve needs 1 <= nsnaps <= nsteps; a handful is plenty for these horizons.
-    nsnaps = clamp(4, 1, nsteps)
+    # Revolve needs 1 <= nsnaps <= nsteps. Held FIXED (AD_NSNAPS) across the horizon
+    # sweep so the checkpointing regime is constant; clamped down only when nsteps is
+    # smaller than the requested count.
+    nsnaps = clamp(AD_NSNAPS, 1, nsteps)
 
-    return (; model, d_model, nsteps, nsnaps, backend,
+    return (; model, d_model, nsteps, nsnaps, backend, integrator, dt_s,
               snap = snapshot_prog(Prog), ncells = length(Prog.ssh[end]))
 end
 
@@ -150,11 +165,14 @@ end
 
 # Raise the CUDA malloc heap for AD ONCE per backend, before any ocn_init touches
 # the context — cuCtxSetLimit(MALLOC_HEAP_SIZE) fails once the heap is in use. Size
-# it for the LARGEST resolution we will differentiate (using the ncells hints, which
-# need no init) so every mesh's Enzyme tape fits. No-op on CPU.
+# it for the LARGEST tape any case will need (using the ncells hints + each config's
+# integrator, both readable without init) so every mesh's Enzyme tape fits. The
+# integrator matters because RK4's tape is ~4× ForwardEuler's (see ad_heap_bytes).
+# No-op on CPU.
 function raise_ad_heap!(backend, resolutions)
-    max_ncells = maximum(r.ncells for r in resolutions)
-    set_ad_device_heap!(backend; bytes = ad_heap_bytes(max_ncells, INTEGRATOR))
+    want = maximum(ad_heap_bytes(r.ncells, config_integrator(r.dir, r.config))
+                   for r in resolutions)
+    set_ad_device_heap!(backend; bytes = want)
     return nothing
 end
 

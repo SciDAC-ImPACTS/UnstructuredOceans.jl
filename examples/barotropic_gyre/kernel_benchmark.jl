@@ -103,6 +103,17 @@ isempty(GPU_BACKENDS) && @warn "No functional GPU (CUDA or AMD) detected; only \
 device_label(bname) = get(DEVICE_LABELS, bname, "unknown")
 const HOSTNAME = gethostname()
 
+# Provenance: which code + runtime produced each row (the CSV schema has drifted before;
+# rows must be self-describing). git hash is best-effort — a .git-less checkout records
+# "unknown" rather than failing.
+const GIT_COMMIT = try
+    readchomp(`git -C $(@__DIR__) rev-parse --short HEAD`)
+catch
+    "unknown"
+end
+const JULIA_VERSION_STR = string(VERSION)
+const NTHREADS = Threads.nthreads()
+
 # --- Resolution ladder (barotropic gyre) --------------------------------------------
 # Only directories that actually contain a config are swept; ncells/nEdges are read
 # from the mesh at run time and written to the CSV.
@@ -281,7 +292,9 @@ function main()
         for res in resolutions
             print("\n=== [$bname] $(res.name)  host=$HOSTNAME  device=$device: init + warm-up... "); flush(stdout)
             st = setup_state(res.dir, res.config, backend)
-            @printf("nEdges=%d nCells=%d nVertices=%d ===\n", st.nEdges, st.nCells, st.nVertices)
+            integrator = string(nameof(st.integrator))
+            @printf("nEdges=%d nCells=%d nVertices=%d integrator=%s ===\n",
+                    st.nEdges, st.nCells, st.nVertices, integrator)
             @printf("  %-13s %-30s %10s  %12s  %12s  %10s\n",
                     "group", "kernel", "extent", "min(µs)", "median(µs)", "ns/elem")
             for k in KERNELS
@@ -296,7 +309,8 @@ function main()
                 nspe = ext > 0 ? s.min / ext : NaN
                 @printf("  %-13s %-30s %10d  %12.3f  %12.3f  %10.4f\n",
                         k.group, k.name, ext, s.min/1e3, s.median/1e3, nspe)
-                push!(rows, Any[HOSTNAME, device, stamp, bname, res.name,
+                push!(rows, Any[HOSTNAME, device, stamp, GIT_COMMIT, JULIA_VERSION_STR, NTHREADS,
+                                bname, res.name, integrator,
                                 st.nEdges, st.nCells, st.nVertices,
                                 k.group, k.name, string(k.extent), ext, s.n,
                                 s.min, s.median, s.mean, nspe])
@@ -307,8 +321,9 @@ function main()
 
     isempty(rows) && (println("\nNo successful kernels — nothing written."); return nothing)
 
-    # host/device/timestamp identify which node+GPU produced each row (appended-file safe).
-    header = ["host" "device" "timestamp" "backend" "res" "nEdges" "nCells" "nVertices" "group" "kernel" "extent" "extent_count" "samples" "min_ns" "median_ns" "mean_ns" "ns_per_elem"]
+    # host/device/timestamp/commit/julia/nthreads identify which node+GPU+code produced
+    # each row (appended-file safe); integrator records which time-stepper was timed.
+    header = ["host" "device" "timestamp" "commit" "julia" "nthreads" "backend" "res" "integrator" "nEdges" "nCells" "nVertices" "group" "kernel" "extent" "extent_count" "samples" "min_ns" "median_ns" "mean_ns" "ns_per_elem"]
     out    = get(ENV, "KBENCH_CSV", joinpath(BG, "kernel_benchmark.csv"))
     append_rows!(out, header, rows)
     println("\nAppended $(length(rows)) row(s) to $out")
