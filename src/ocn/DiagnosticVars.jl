@@ -127,10 +127,10 @@ function diagnostic_compute!(Mesh::Mesh,
                              Prog::PrognosticVars;
                              nthreads=DEFAULT_NTHREADS)
 
-    calculate_thicknessFlux!(Diag, Prog, Mesh; nthreads=nthreads)
-    calculate_velocityDivCell!(Diag, Prog, Mesh; nthreads=nthreads)
-    calculate_relativeVorticity!(Diag, Prog, Mesh; nthreads=nthreads)
-    calculate_layerThicknessEdge!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_thickness_flux!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_velocity_div_cell!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_relative_vorticity!(Diag, Prog, Mesh; nthreads=nthreads)
+    calculate_layer_thickness_edge!(Diag, Prog, Mesh; nthreads=nthreads)
 end
 
 #= Preformance Note:
@@ -140,7 +140,7 @@ end
     thereby reducing the array allocations? 
 =# 
 
-function calculate_layerThicknessEdge!(Diag::DiagnosticVars,
+function calculate_layer_thickness_edge!(Diag::DiagnosticVars,
                                        Prog::PrognosticVars,
                                        Mesh::Mesh;
                                        nthreads=DEFAULT_NTHREADS)
@@ -155,7 +155,7 @@ function calculate_layerThicknessEdge!(Diag::DiagnosticVars,
     @pack! Diag = layerThicknessEdge
 end 
 
-function calculate_thicknessFlux!(Diag::DiagnosticVars,
+function calculate_thickness_flux!(Diag::DiagnosticVars,
                                   Prog::PrognosticVars,
                                   Mesh::Mesh;
                                   nthreads=DEFAULT_NTHREADS)
@@ -165,14 +165,14 @@ function calculate_thicknessFlux!(Diag::DiagnosticVars,
     normalVelocity = Prog.normalVelocity[end]
     @unpack thicknessFlux, layerThicknessEdge = Diag
 
-    kernel!  = compute_thicknessFlux!(backend, nthreads)
+    kernel!  = compute_thickness_flux!(backend, nthreads)
 
     kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, size(normalVelocity)[2], ndrange=size(normalVelocity)[2])
 
     @pack! Diag = thicknessFlux
 end
 
-@kernel function compute_thicknessFlux!(thicknessFlux,
+@kernel function compute_thickness_flux!(thicknessFlux,
                                         normalVelocity,
                                         layerThicknessEdge,
                                         arrayLength)
@@ -185,7 +185,7 @@ end
     @synchronize()
 end
 
-function calculate_velocityDivCell!(Diag::DiagnosticVars,
+function calculate_velocity_div_cell!(Diag::DiagnosticVars,
                                     Prog::PrognosticVars,
                                     Mesh::Mesh;
                                     nthreads=DEFAULT_NTHREADS)
@@ -198,7 +198,7 @@ function calculate_velocityDivCell!(Diag::DiagnosticVars,
     @pack! Diag = velocityDivCell
 end
 
-function calculate_relativeVorticity!(Diag::DiagnosticVars,
+function calculate_relative_vorticity!(Diag::DiagnosticVars,
                                       Prog::PrognosticVars,
                                       Mesh::Mesh;
                                       nthreads=DEFAULT_NTHREADS)

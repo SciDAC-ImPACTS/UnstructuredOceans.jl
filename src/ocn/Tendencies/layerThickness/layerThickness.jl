@@ -1,6 +1,6 @@
-module layerThickness
+module LayerThickness
 
-export computeLayerThicknessTendency!
+export compute_layer_thickness_tendency!
 
 using UnPack
 using KernelAbstractions 
@@ -12,7 +12,7 @@ const KA = KernelAbstractions
 
 include("horizontal_advection.jl")
 
-function computeLayerThicknessTendency!(Tend::TendencyVars,
+function compute_layer_thickness_tendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
                                         Diag::DiagnosticVars,
                                         Mesh::Mesh;

@@ -32,7 +32,7 @@ DEFAULT_NTHREADS
 Mesh
 HorzMesh
 VerticalMesh
-ReadHorzMesh
+read_horz_mesh
 Cell
 Edge
 Vertex
@@ -62,8 +62,8 @@ AbstractAlarm
 OneTimeAlarm
 PeriodicAlarm
 advance!
-isRinging
-changeTimeStep!
+is_ringing
+change_time_step!
 reset!
 ```
 
@@ -99,7 +99,7 @@ ocn_step!
 
 ```@docs
 io_initialize
-io_writeTimestep
+io_write_timestep
 io_finalize
 write_netcdf
 ```

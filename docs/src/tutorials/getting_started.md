@@ -68,7 +68,7 @@ timestep = KA.zeros(backend, Float64, (1,))
 @allowscalar timestep[1] = Float64(Dates.value(Second(Setup.timeManager.timeStep)))
 
 # 4. Select the time integrator from the config string.
-ti = MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+ti = MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
                     "config_time_integrator")
 integrator = parse_integrator(ti)     # RungeKutta4 or ForwardEuler
 

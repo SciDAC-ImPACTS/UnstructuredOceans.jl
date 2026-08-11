@@ -159,8 +159,8 @@ function ocn_timestep(dt,
     diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     for RK_step in 1:4
-        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; viscDel2=viscDel2, nthreads=nthreads)
-        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
+        compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; viscDel2=viscDel2, nthreads=nthreads)
+        compute_layer_thickness_tendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
         @unpack tendNormalVelocity, tendLayerThickness = Tend
 
@@ -235,10 +235,10 @@ function ocn_timestep(timestep,
     diagnostic_compute!(Mesh, Diag, Prog; nthreads=nthreads)
 
     # compute normalVelocity tenedency
-    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh; viscDel2=viscDel2, nthreads=nthreads)
+    compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh; viscDel2=viscDel2, nthreads=nthreads)
 
     # compute layerThickness tendency
-    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
+    compute_layer_thickness_tendency!(Tend, Prog, Diag, Mesh; nthreads=nthreads)
 
     # update the state variables by the tendencies
     tendKernel! = forward_euler_step!(backend, nthreads)

@@ -60,7 +60,7 @@ end
     # edgesOnEdge / weightsOnEdge are stored EDGE-MAJOR ([iEdge, i]) so that, with the
     # thread index iEdge as the leading (unit-stride) dimension, a warp's reads of a
     # fixed neighbour i are contiguous and coalesce into few cache lines (see the layout
-    # note in readEdgeInfo). Indexing them [i, iEdge] here would reintroduce the strided,
+    # note in read_edge_info). Indexing them [i, iEdge] here would reintroduce the strided,
     # L2-spilling access that made this kernel scale super-linearly on the GPU.
     @inbounds for i in 1:nEdgesOnEdge[iEdge]
 

@@ -27,7 +27,7 @@ The returned `Setup` carries the alarms needed to drive the run; recover them wi
 function ocn_init(Config_filepath; backend=KA.CPU())
     
     # read the configuration file 
-    Config = ConfigRead(Config_filepath)
+    Config = config_read(Config_filepath)
     
     #TO DO: Read constants ?? 
 
@@ -75,19 +75,19 @@ end
 
 
 function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
-    meshConfig = ConfigGet(Config.streams, "mesh")
-    mesh_fp = ConfigGet(meshConfig, "filename_template")
+    meshConfig = config_get(Config.streams, "mesh")
+    mesh_fp = config_get(meshConfig, "filename_template")
 
     # read del2 momentum viscosity; default 0 (no mixing) if section absent
     momentumDel2 = 0.0
     if haskey(Config.namelist.dict, "hmix_del2")
-        hmixConfig = ConfigGet(Config.namelist, "hmix_del2")
+        hmixConfig = config_get(Config.namelist, "hmix_del2")
         if haskey(hmixConfig.dict, "config_mom_del2")
-            momentumDel2 = Float64(ConfigGet(hmixConfig, "config_mom_del2"))
+            momentumDel2 = Float64(config_get(hmixConfig, "config_mom_del2"))
         end
     end
 
-    h_mesh = ReadHorzMesh(mesh_fp; backend=backend,
+    h_mesh = read_horz_mesh(mesh_fp; backend=backend,
                           momentumDel2=momentumDel2, rho=1000.0)
     v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
 
@@ -97,18 +97,18 @@ end
 function ocn_setup_clock(Config::GlobalConfig)
 
     # Get the nested Config objects 
-    outputConfig = ConfigGet(Config.streams, "output")
-    time_managementConfig = ConfigGet(Config.namelist, "time_management")
-    time_integrationConfig = ConfigGet(Config.namelist, "time_integration")
+    outputConfig = config_get(Config.streams, "output")
+    time_managementConfig = config_get(Config.namelist, "time_management")
+    time_integrationConfig = config_get(Config.namelist, "time_integration")
     
-    dt = ConfigGet(time_integrationConfig, "config_dt")
-    stop_time = ConfigGet(time_managementConfig, "config_stop_time")
-    start_time = ConfigGet(time_managementConfig, "config_start_time")
-    run_duration = ConfigGet(time_managementConfig, "config_run_duration")
-    restart_timestamp_name = ConfigGet(time_managementConfig, "config_restart_timestamp_name")
+    dt = config_get(time_integrationConfig, "config_dt")
+    stop_time = config_get(time_managementConfig, "config_stop_time")
+    start_time = config_get(time_managementConfig, "config_start_time")
+    run_duration = config_get(time_managementConfig, "config_run_duration")
+    restart_timestamp_name = config_get(time_managementConfig, "config_restart_timestamp_name")
     
-    output_reference_time = ConfigGet(outputConfig, "reference_time")
-    output_interval = ConfigGet(outputConfig, "output_interval")
+    output_reference_time = config_get(outputConfig, "reference_time")
+    output_interval = config_get(outputConfig, "output_interval")
 
     if run_duration != "none" 
         clock = mpas_create_clock(dt, start_time; runDuration=run_duration)
@@ -126,12 +126,12 @@ function ocn_setup_clock(Config::GlobalConfig)
     # create the end of simulation alarm 
     simulationAlarm = OneTimeAlarm("simulation_end", stop_time)
     # attached the simulation_end alarm to the clock 
-    attachAlarm!(clock, simulationAlarm)
+    attach_alarm!(clock, simulationAlarm)
 
     # create the ouput alarm
     outputAlarm = PeriodicAlarm("outputAlarm", output_interval, output_reference_time)
     # attach the output alarm to the clock 
-    attachAlarm!(clock, outputAlarm)
+    attach_alarm!(clock, outputAlarm)
 
     return clock
 end 

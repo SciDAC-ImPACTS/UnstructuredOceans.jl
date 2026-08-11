@@ -1,12 +1,12 @@
 module MOKA
 
-    export ocn_run_loop, ocn_run_loop_fwd!, ocn_run_loop_checkpointed!, ocn_loss, OceanModel, ocn_step!, ocn_init, ocn_init_shadows, ocn_init_alarms, isRinging, advance!, ocn_timestep, changeTimeStep!, reset!
+    export ocn_run_loop, ocn_run_loop_fwd!, ocn_run_loop_checkpointed!, ocn_loss, OceanModel, ocn_step!, ocn_init, ocn_init_shadows, ocn_init_alarms, is_ringing, advance!, ocn_timestep, change_time_step!, reset!
     export RungeKutta4, ForwardEuler, parse_integrator
-    export write_netcdf, io_initialize, io_writeTimestep, io_finalize
+    export write_netcdf, io_initialize, io_write_timestep, io_finalize
     export Clock, OneTimeAlarm, PeriodicAlarm
 
     # MPASMesh
-    export VerticalMesh, ReadHorzMesh, Mesh, HorzMesh,
+    export VerticalMesh, read_horz_mesh, Mesh, HorzMesh,
            Cell, Edge, Vertex
 
     # Operators
@@ -52,6 +52,6 @@ module MOKA
     ### Needed so we can export names from sub-modules at the top level
     ###
     using .MPASMesh
-    using .normalVelocity
-    using .layerThickness
+    using .NormalVelocity
+    using .LayerThickness
 end

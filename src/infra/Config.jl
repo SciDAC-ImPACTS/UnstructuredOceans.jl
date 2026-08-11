@@ -39,7 +39,7 @@ Allow the type info to be passed so that it
 can be used to create a new instance if string 
 corresponds to header, not a config option. 
 """
-function ConfigGet(d::C, s::String) where {C<:yaml_config}
+function config_get(d::C, s::String) where {C<:yaml_config}
     
     # access the underlying dictionary contained within the object
     # and use key (string) to get config info 
@@ -57,10 +57,10 @@ end
 
 """ Method for adding a new configuration option (and value)
 """
-function ConfigAdd(d::C, s::String, val) where {C<:yaml_config}
+function config_add(d::C, s::String, val) where {C<:yaml_config}
 
     if haskey(d.dict, s)
-        error("ConfigAdd: variable $(s) already exists use ConfigSet instead")
+        error("config_add: variable $(s) already exists use config_set instead")
     else
         d.dict[s] = val
     end
@@ -68,20 +68,20 @@ end
 
 """ Method for overwriting value of existing configuration setting
 """
-function ConfigSet(d::C, s::String, val) where {C<:yaml_config}
+function config_set(d::C, s::String, val) where {C<:yaml_config}
 
     if haskey(d.dict, s)
 
         # check that the type of the new value is the same as existing
         if typeof(d.dict[s]) != typeof(val)
-            @warn """ConfigSet: Changing typeof \"$(s)\",
+            @warn """config_set: Changing typeof \"$(s)\",
                      $(typeof(d.dict[s])) != $(typeof(val))
                   """
         end
 
         d.dict[s] = val
     else
-        error("ConfigSet: Could not find variable $(s)")
+        error("config_set: Could not find variable $(s)")
     end
 end
 
@@ -93,7 +93,7 @@ end
     5. config write 
 =# 
 
-function ConfigRead(filepath::AbstractString)
+function config_read(filepath::AbstractString)
 
     # check that the config YAML file exists
     if !isfile(filepath)
@@ -127,7 +127,7 @@ function parse_Datetimes(dict::Dict{Any,Any})
 
         # check if the timestamp pattern occurs in the string values
         if value isa String && occursin(timestamp_pat, value)
-            dict[key] = DateTime_from_String(value)
+            dict[key] = datetime_from_string(value)
         end 
     end
 
@@ -161,7 +161,7 @@ function index_to_period(captures)
     idx == 6 && return Second(captures[idx])
 end
 
-function DateTime_from_String(string::String)
+function datetime_from_string(string::String)
 
     mat = match(timestamp_pat, string)
 

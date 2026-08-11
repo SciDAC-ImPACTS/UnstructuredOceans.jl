@@ -5,7 +5,7 @@ export Mesh
 # VertMesh.jl
 export VerticalMesh
 # HorzMesh.jl
-export Cell, Edge, Vertex, ReadHorzMesh, HorzMesh
+export Cell, Edge, Vertex, read_horz_mesh, HorzMesh
 
 using Accessors
 using NCDatasets

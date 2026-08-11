@@ -8,7 +8,7 @@ meshes with a triangular Delaunay dual — the same family of meshes MPAS uses.
 
 A TRiSK mesh carries quantities at three locations, represented in MOKA by the
 [`Cell`](@ref), [`Edge`](@ref), and [`Vertex`](@ref) marker types and read from an
-MPAS NetCDF file by [`ReadHorzMesh`](@ref):
+MPAS NetCDF file by [`read_horz_mesh`](@ref):
 
 - **Cells** ``i`` (primal cell centers, area ``A_i``) — scalars such as layer
   thickness and sea-surface height.

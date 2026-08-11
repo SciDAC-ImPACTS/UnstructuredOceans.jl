@@ -13,20 +13,20 @@
 #     velocityDivCell         nCells     divergence of thicknessFlux  (Div op, 2 kernels)
 #     relativeVorticity       nVertices  curl of normalVelocity
 #     layerThicknessEdge      nEdges     cell->edge interpolation
-#   normalVelocity tendency  (computeNormalVelocityTendency!)
+#   normalVelocity tendency  (compute_normal_velocity_tendency!)
 #     zeroTendNormalVel       nEdges
 #     pressureGradient        nEdges     -g d(ssh)/dx        (Gradient op)
 #     advectionCoriolis       nEdges     linear Coriolis
 #     momentumMixing          nEdges     del2 viscosity
 #     windForcing             nEdges     surface wind stress
-#   layerThickness tendency  (computeLayerThicknessTendency!)
+#   layerThickness tendency  (compute_layer_thickness_tendency!)
 #     zeroTendLayerThk        nCells
 #     thicknessFluxDiv        nCells     divergence of thicknessFlux
 #   time integration
 #     advanceTimeLevels       fields     copy [end] -> [end-1]
 #
 # For context the harness ALSO times the three composite drivers (diagnostic_compute!,
-# computeNormalVelocityTendency!, computeLayerThicknessTendency!) and one full
+# compute_normal_velocity_tendency!, compute_layer_thickness_tendency!) and one full
 # ocn_timestep, so per-kernel numbers can be checked against the stage totals.
 #
 # GPU timing: a kernel launch is asynchronous, so the timed body launches the kernel
@@ -154,8 +154,8 @@ _dt_seconds(Setup) = convert(Float64, Dates.value(Second(Setup.timeManager.timeS
 # extent the kernel loops over (nEdges/nCells/nVertices) so per-element throughput can
 # be derived. `apply(st)` launches the kernel(s) but does NOT synchronize — the timed
 # wrapper does that once, after REPEATS launches.
-const nV = MOKA.normalVelocity
-const lT = MOKA.layerThickness
+const nV = MOKA.NormalVelocity
+const lT = MOKA.LayerThickness
 
 struct Kernel
     group::String
@@ -166,10 +166,10 @@ end
 
 const KERNELS = Kernel[
     # diagnostics
-    Kernel("diagnostics", "thicknessFlux",      :nEdges,    st -> MOKA.calculate_thicknessFlux!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "velocityDivCell",    :nCells,    st -> MOKA.calculate_velocityDivCell!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "relativeVorticity",  :nVertices, st -> MOKA.calculate_relativeVorticity!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "layerThicknessEdge", :nEdges,    st -> MOKA.calculate_layerThicknessEdge!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "thicknessFlux",      :nEdges,    st -> MOKA.calculate_thickness_flux!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "velocityDivCell",    :nCells,    st -> MOKA.calculate_velocity_div_cell!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "relativeVorticity",  :nVertices, st -> MOKA.calculate_relative_vorticity!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "layerThicknessEdge", :nEdges,    st -> MOKA.calculate_layer_thickness_edge!(st.Diag, st.Prog, st.Mesh)),
     # normalVelocity tendency terms
     Kernel("normalVelTend", "pressureGradient",   :nEdges, st -> nV.pressure_gradient_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.sshGradient)),
     Kernel("normalVelTend", "advectionCoriolis",  :nEdges, st -> nV.horizontal_advection_and_coriolis_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.linearCoriolis)),
@@ -181,8 +181,8 @@ const KERNELS = Kernel[
     Kernel("integration", "advanceTimeLevels",    :mixed,  st -> MOKA.advance_time_levels!(st.Prog)),
     # composite drivers (for cross-checking against the sum of their parts)
     Kernel("composite", "diagnostic_compute!",           :mixed, st -> MOKA.diagnostic_compute!(st.Mesh, st.Diag, st.Prog)),
-    Kernel("composite", "computeNormalVelocityTendency!", :nEdges, st -> MOKA.computeNormalVelocityTendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
-    Kernel("composite", "computeLayerThicknessTendency!", :nCells, st -> MOKA.computeLayerThicknessTendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
+    Kernel("composite", "compute_normal_velocity_tendency!", :nEdges, st -> MOKA.compute_normal_velocity_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
+    Kernel("composite", "compute_layer_thickness_tendency!", :nCells, st -> MOKA.compute_layer_thickness_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
     Kernel("composite", "ocn_timestep",                   :mixed, st -> ocn_timestep(st.timestep, st.Prog, st.Diag, st.Tend, st.Mesh, st.integrator)),
 ]
 
@@ -205,7 +205,7 @@ function setup_state(dir, config, backend)
     timestep = KA.zeros(backend, Float64, (1,))
     @allowscalar timestep[1] = _dt_seconds(Setup)
     integrator = parse_integrator(
-        MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
     edges    = Mesh.HorzMesh.Edges
     cells    = Mesh.HorzMesh.PrimaryCells

@@ -1,6 +1,6 @@
-module normalVelocity
+module NormalVelocity
 
-export computeNormalVelocityTendency!
+export compute_normal_velocity_tendency!
 
 using UnPack
 using KernelAbstractions
@@ -13,7 +13,7 @@ include("horizontal_advection_and_coriolis.jl")
 include("horizontal_momentum_mixing.jl")
 include("wind_forcing.jl")
 
-function computeNormalVelocityTendency!(Tend::TendencyVars,
+function compute_normal_velocity_tendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
                                         Diag::DiagnosticVars,
                                         Mesh::Mesh;

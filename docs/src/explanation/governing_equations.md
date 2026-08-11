@@ -22,8 +22,8 @@ density). ``f`` is the Coriolis parameter.
 Each term maps to a piece of code in the tendency modules under
 `src/ocn/Tendencies/`: the SSH pressure gradient, the (linear) Coriolis term,
 the del2 momentum mixing, and the wind forcing, summed in
-`computeNormalVelocityTendency!`; the thickness-flux divergence is assembled in
-`computeLayerThicknessTendency!`. These are advanced in time by
+`compute_normal_velocity_tendency!`; the thickness-flux divergence is assembled in
+`compute_layer_thickness_tendency!`. These are advanced in time by
 [`ocn_timestep`](@ref).
 
 ## Vector-invariant form

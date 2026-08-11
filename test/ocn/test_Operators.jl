@@ -15,7 +15,7 @@ Downloads.download(mesh_url, mesh_fn)
 backend = KA.CPU();
 
 # Read in the purely horizontal doubly periodic testing mesh
-HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
+HorzMesh = read_horz_mesh(mesh_fn; backend=backend)
 # Create a dummy vertical mesh from the horizontal mesh
 VertMesh = VerticalMesh(HorzMesh; nVertLevels=10, backend=backend)
 # Create a the full Mesh strucutre 

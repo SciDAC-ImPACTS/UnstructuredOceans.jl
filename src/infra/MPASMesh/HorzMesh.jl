@@ -175,7 +175,7 @@ end
 
 stack(arr, N) = [Tuple(arr[:,i]) for i in 1:N]
 
-function readPrimaryMesh(ds)
+function read_primary_mesh(ds)
     
     # get dimension info 
     nCells  = ds.dim["nCells"] 
@@ -217,7 +217,7 @@ function readPrimaryMesh(ds)
                  edgeSignOnCell = edgeSignOnCell)
 end
 
-function readDualMesh(ds)
+function read_dual_mesh(ds)
 
     # get dimension info 
     nVertices = ds.dim["nVertices"] 
@@ -256,7 +256,7 @@ function readDualMesh(ds)
               areaTriangle = areaTriangle)
 end 
 
-function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+function read_edge_info(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
@@ -329,7 +329,7 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
           momentumDel2 = [momentumDel2])
 end
 
-function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
+function sign_index_field!(primaryCells::PrimaryCells, edges::Edges)
     
     @unpack cellsOnEdge = edges
     @unpack nCells, edgeSignOnCell, nEdgesOnCell, edgesOnCell = primaryCells
@@ -350,7 +350,7 @@ function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
     @reset primaryCells.edgeSignOnCell = edgeSignOnCell
 end 
 
-function signIndexField!(dualMesh::DualCells, edges::Edges)
+function sign_index_field!(dualMesh::DualCells, edges::Edges)
     
     @unpack verticesOnEdge = edges
     @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh 
@@ -373,7 +373,7 @@ function signIndexField!(dualMesh::DualCells, edges::Edges)
 end 
 
 """
-    ReadHorzMesh(meshPath; backend=KernelAbstractions.CPU(),
+    read_horz_mesh(meshPath; backend=KernelAbstractions.CPU(),
                  momentumDel2=0.0, rho=1000.0) -> HorzMesh
 
 Read an MPAS horizontal mesh from the NetCDF file at `meshPath` and return a
@@ -385,19 +385,19 @@ fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
 ``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing), and
 `rho` is the reference density used to scale the wind forcing.
 """
-function ReadHorzMesh(meshPath::String; backend=KA.CPU(),
+function read_horz_mesh(meshPath::String; backend=KA.CPU(),
                       momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
 
     ds = NCDataset(meshPath, "r", format=:netcdf4)
 
-    PrimaryMesh = readPrimaryMesh(ds)
-    DualMesh    = readDualMesh(ds)
-    edges       = readEdgeInfo(ds; momentumDel2 = momentumDel2, rho = rho)
+    PrimaryMesh = read_primary_mesh(ds)
+    DualMesh    = read_dual_mesh(ds)
+    edges       = read_edge_info(ds; momentumDel2 = momentumDel2, rho = rho)
     
     # set the edge sign on cells (primary mesh)
-    signIndexField!(PrimaryMesh, edges)
+    sign_index_field!(PrimaryMesh, edges)
     # set the edge sign on vertices (dual mesh)
-    signIndexField!(DualMesh, edges)
+    sign_index_field!(DualMesh, edges)
     
     mesh = HorzMesh(PrimaryMesh, DualMesh, edges)
     

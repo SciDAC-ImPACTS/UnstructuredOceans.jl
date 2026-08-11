@@ -16,7 +16,7 @@ An ESMF-style simulation clock tracking the current, previous, and next times an
 a dictionary of attached [`AbstractAlarm`](@ref)s.
 
 Advance it one `timeStep` with [`advance!`](@ref), which also updates every
-attached alarm's ringing status. Change the step with [`changeTimeStep!`](@ref).
+attached alarm's ringing status. Change the step with [`change_time_step!`](@ref).
 `ocn_init` builds the clock from the config and attaches the simulation-end and
 output alarms; retrieve them with [`ocn_init_alarms`](@ref).
 """
@@ -46,7 +46,7 @@ mutable struct Clock
     end 
 end 
 
-function setCurrentTime!(clock::Clock, inCurrTime::DateTime)
+function set_current_time!(clock::Clock, inCurrTime::DateTime)
     # Check that new value doesn't precede start time 
     if inCurrTime < clock.startTime
         @error "Value of current time precedes start time" 
@@ -58,18 +58,18 @@ function setCurrentTime!(clock::Clock, inCurrTime::DateTime)
 end
 
 """
-    changeTimeStep!(clock::Clock, timestep::Period)
+    change_time_step!(clock::Clock, timestep::Period)
 
 Set the clock's timestep to `timestep` and update its `nextTime` accordingly.
 """
-function changeTimeStep!(clock::Clock, timestep::Period)
+function change_time_step!(clock::Clock, timestep::Period)
     # Assign the new time step to this clock
     clock.timeStep = timestep
     # Update the next time based on new time step
     clock.nextTime = clock.currTime + timestep 
 end 
 
-function attachAlarm!(clock::Clock, alarm::AbstractAlarm)
+function attach_alarm!(clock::Clock, alarm::AbstractAlarm)
     # use the alarms name to insert it in the dict of alarms
     clock.alarms[alarm.name] = alarm
 end
@@ -87,7 +87,7 @@ function advance!(clock::Clock)
     clock.nextTime = clock.currTime + clock.timeStep
     # Update status of any attached alarms via broadcasting
     # across the values of the alarms dictionary
-    updateStatus!.(values(clock.alarms), clock.currTime)
+    update_status!.(values(clock.alarms), clock.currTime)
 end 
 
 Base.show(io::IO, clock::Clock) = 
@@ -110,7 +110,7 @@ Base.show(io::IO, clock::Clock) =
     OneTimeAlarm(name::String, alarmTime::DateTime)
 
 An alarm that rings once, at or after `alarmTime`. Used for the end-of-simulation
-alarm. Query it with [`isRinging`](@ref) and clear it with [`reset!`](@ref).
+alarm. Query it with [`is_ringing`](@ref) and clear it with [`reset!`](@ref).
 """
 mutable struct OneTimeAlarm{S,B,DT} <: AbstractAlarm
     name::S       # name of the alarm
@@ -131,7 +131,7 @@ end
 
 An alarm that rings every `alarmInterval` starting one interval after
 `intervalStart`. Used to trigger periodic output. After it rings, [`reset!`](@ref)
-schedules the next ring time. Query it with [`isRinging`](@ref).
+schedules the next ring time. Query it with [`is_ringing`](@ref).
 """
 mutable struct PeriodicAlarm{S,B,DT,P} <: AbstractAlarm
     name::S                           # name of the alarm
@@ -144,7 +144,7 @@ mutable struct PeriodicAlarm{S,B,DT,P} <: AbstractAlarm
     ringTimePrev::Union{Nothing, DT} # previous alaram time for periodic alarms
     
     # if Period is closed inteval  (c.f.open), then how do you deal with the first timestep since the 
-    # `updateStatus` method is called at the end of the timestep, so if the alarm fall on the 
+    # `update_status` method is called at the end of the timestep, so if the alarm fall on the 
     # first timestep it is always skipped. 
     function PeriodicAlarm(name::String, alarmInterval::Period, intervalStart::DateTime)
         # NOTE: should alarm ring on interval start? or only after the first interval 
@@ -163,16 +163,16 @@ Alarm(name::String, alarmInterval::Period, intervalStart::DateTime) =
 
 # Methods that work for all types of alarms
 """
-    isRinging(alarm::AbstractAlarm) -> Bool
+    is_ringing(alarm::AbstractAlarm) -> Bool
 
 Return `true` if `alarm` is currently ringing. The run loop polls the
 simulation-end and output alarms with this each step.
 """
-function isRinging(alarm::AbstractAlarm)
+function is_ringing(alarm::AbstractAlarm)
     return alarm.ringing
 end
 
-function updateStatus!(alarm::AbstractAlarm, currentTime::DateTime)
+function update_status!(alarm::AbstractAlarm, currentTime::DateTime)
     alarm.ringTime == currentTime && (alarm.ringing = true)
 end 
 

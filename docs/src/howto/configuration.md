@@ -2,7 +2,7 @@
 
 A MOKA run is fully specified by one YAML configuration file. The format follows
 the OMEGA / MPAS-Ocean convention: a top-level `omega:` mapping that the parser
-(`MOKA.ConfigRead`, in `src/infra/Config.jl`) splits into
+(`MOKA.config_read`, in `src/infra/Config.jl`) splits into
 a **namelist** (grouped scalar options) and **streams** (I/O definitions).
 
 Below is a complete config for the 10 km barotropic gyre
@@ -45,7 +45,7 @@ Key options:
 - **Timestep** — `config_dt` becomes the clock timestep; choose it for CFL
   stability at your resolution.
 - **Viscosity** — `hmix_del2.config_mom_del2` sets ``\nu_2``; it is read by
-  [`ReadHorzMesh`](@ref) and stored on the mesh edges. Omit the section (or set
+  [`read_horz_mesh`](@ref) and stored on the mesh edges. Omit the section (or set
   `config_use_mom_del2: false`) to disable lateral mixing.
 
 ## Streams section
@@ -79,7 +79,7 @@ Streams declare the input, forcing, restart, and output files:
   setup.
 - **`output`** — `output_interval` sets the period of the output
   [`PeriodicAlarm`](@ref); `contents` lists the variables written each frame by
-  [`io_writeTimestep`](@ref).
+  [`io_write_timestep`](@ref).
 
 ## Generating meshes
 

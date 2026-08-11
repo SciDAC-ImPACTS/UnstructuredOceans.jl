@@ -50,7 +50,7 @@ rings, integrating with `integrator` ([`RungeKutta4`](@ref) or
 This is the top-level driver of a simulation. Each iteration advances the
 [`Clock`](@ref) by one step, calls [`ocn_timestep`](@ref) to update `Prog` in
 place, and — whenever `outputAlarm` rings — appends a frame to `output_ds` via
-[`io_writeTimestep`](@ref). Progress (throughput, ETA, and field magnitudes) is
+[`io_write_timestep`](@ref). Progress (throughput, ETA, and field magnitudes) is
 printed every `print_interval` steps, and the run aborts early if the state
 diverges (NaN/Inf, or `ssh`/velocity/thickness leaving physical bounds).
 
@@ -89,7 +89,7 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
     frame        = 1
     last_written = clock.startTime
 
-    while !isRinging(simulationAlarm)
+    while !is_ringing(simulationAlarm)
         advance!(clock)
         ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
         step += 1
@@ -109,10 +109,10 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
                     elapsed, rate, eta, max_ssh, max_vel)
         end
 
-        if isRinging(outputAlarm)
+        if is_ringing(outputAlarm)
             if output_ds !== nothing
                 frame += 1
-                io_writeTimestep(output_ds, Setup, Prog, frame)
+                io_write_timestep(output_ds, Setup, Prog, frame)
                 last_written = clock.currTime
             end
             reset!(outputAlarm)
@@ -122,7 +122,7 @@ function ocn_run_loop(timestep, Prog, Diag, Tend, Setup, integrator, clock, simu
     # Capture the final state if it wasn't already written at a checkpoint
     if output_ds !== nothing && clock.currTime != last_written
         frame += 1
-        io_writeTimestep(output_ds, Setup, Prog, frame)
+        io_write_timestep(output_ds, Setup, Prog, frame)
     end
 
     elapsed = time() - t_start
@@ -138,21 +138,21 @@ end
 # does not support. The caller must pre-seed d_sumGPU and do the D2H copy outside autodiff.
 function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, integrator, clock, simulationAlarm, outputAlarm)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
-    while !isRinging(simulationAlarm)
+    while !is_ringing(simulationAlarm)
         advance!(clock)
         ocn_timestep(timestep, Prog, Diag, Tend, Mesh, integrator)
-        if isRinging(outputAlarm)
+        if is_ringing(outputAlarm)
             reset!(outputAlarm)
         end
     end
 
-    sumKernel! = sumArray(backend, 1)
+    sumKernel! = sum_array(backend, 1)
     sumKernel!(sumGPU, Prog.ssh[end], size(Prog.ssh[end])[1], ndrange=1)
 
     return nothing
 end
 
-@kernel function sumArray(sumGPU, array, arrayLength)
+@kernel function sum_array(sumGPU, array, arrayLength)
     for j = 1:arrayLength
         sumGPU[1] = sumGPU[1] + array[j]*array[j]
     end

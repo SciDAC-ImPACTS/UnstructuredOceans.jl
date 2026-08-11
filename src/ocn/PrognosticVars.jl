@@ -1,7 +1,7 @@
 using UnPack
 
 import Adapt
-#using MPAS_O: GlobalConfig, Mesh, ConfigGet, NCDataset
+#using MPAS_O: GlobalConfig, Mesh, config_get, NCDataset
 
 """
     PrognosticVars
@@ -67,19 +67,19 @@ end
 
 function PrognosticVars(config::GlobalConfig, mesh::Mesh; backend=KA.CPU())
     
-    timeManagementConfig = ConfigGet(config.namelist, "time_management")
-    do_restart = ConfigGet(timeManagementConfig, "config_do_restart")
+    timeManagementConfig = config_get(config.namelist, "time_management")
+    do_restart = config_get(timeManagementConfig, "config_do_restart")
     
     if do_restart
         ArgumentError("restart not yet supported")
     else
-        inputConfig = ConfigGet(config.streams, "input")
-        input_filename = ConfigGet(inputConfig, "filename_template")
+        inputConfig = config_get(config.streams, "input")
+        input_filename = config_get(inputConfig, "filename_template")
     end 
     
     # Read the number of desired time levels from the config file 
-    timeIntegrationConfig = ConfigGet(config.namelist, "time_integration")
-    nTimeLevels = ConfigGet(timeIntegrationConfig, "config_number_of_time_levels")
+    timeIntegrationConfig = config_get(config.namelist, "time_integration")
+    nTimeLevels = config_get(timeIntegrationConfig, "config_number_of_time_levels")
     
     @unpack HorzMesh, VertMesh = mesh    
     @unpack PrimaryCells, Edges = HorzMesh

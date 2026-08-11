@@ -19,7 +19,7 @@ function ocn_run_with_ad(config_fp, k, backend)
     Mesh = Setup.mesh
 
     integrator = parse_integrator(
-        MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
 
     # Number of fixed-size timesteps from start until the simulation-end alarm.
@@ -71,7 +71,7 @@ function ocn_run_fd(config_fp, k, backend)
         sumGPU   = KA.zeros(backend, Float64, (1,))
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
         integrator = parse_integrator(
-            MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+            MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
                            "config_time_integrator"))
         perturb!(Prog)
         ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, integrator,

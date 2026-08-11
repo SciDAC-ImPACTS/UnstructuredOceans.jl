@@ -126,7 +126,7 @@ const INTEGRATOR_OVERRIDE = haskey(ENV, "RES_BENCH_INTEGRATOR") ?
 # the time_integration group.
 function case_integrator(Setup)
     INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
-    ti = MOKA.ConfigGet(MOKA.ConfigGet(Setup.config.namelist, "time_integration"),
+    ti = MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
                         "config_time_integrator")
     return parse_integrator(ti)
 end
@@ -136,8 +136,8 @@ end
 # before ocn_init, since cuCtxSetLimit(MALLOC_HEAP_SIZE) fails once the context is in use.
 function config_integrator(dir, config)
     INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
-    cfg = MOKA.ConfigRead(joinpath(dir, config))
-    ti  = MOKA.ConfigGet(MOKA.ConfigGet(cfg.namelist, "time_integration"),
+    cfg = MOKA.config_read(joinpath(dir, config))
+    ti  = MOKA.config_get(MOKA.config_get(cfg.namelist, "time_integration"),
                          "config_time_integrator")
     return parse_integrator(ti)
 end

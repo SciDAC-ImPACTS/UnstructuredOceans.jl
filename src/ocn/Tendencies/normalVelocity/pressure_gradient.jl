@@ -1,11 +1,11 @@
 # define our parent abstract type 
-abstract type PresssureGradient end
+abstract type PressureGradient end
 
 using KernelAbstractions
 const KA=KernelAbstractions
 
 # define the supported PressureGradient types to dispatch on. 
-abstract type sshGradient <: PresssureGradient end 
+abstract type sshGradient <: PressureGradient end 
 
 function pressure_gradient_tendency!(Tend::TendencyVars,
                                      Prog::PrognosticVars,

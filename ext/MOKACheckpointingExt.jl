@@ -21,7 +21,7 @@ import MOKA: OceanModel
 # between steps. The loop body touches only `model`, so the closure Checkpointing
 # builds captures exactly that one struct (no stray scalar capture).
 #
-# The loss is sumGPU[1] = Σ ssh[end]², accumulated by MOKA.sumArray after the loop.
+# The loss is sumGPU[1] = Σ ssh[end]², accumulated by MOKA.sum_array after the loop.
 # We do NOT differentiate a GPU `sum` reduction (Enzyme has no rule for CUDA's
 # mapreduce and errors on it); instead the loss is written by a KA kernel — which
 # Enzyme differentiates like every other kernel in `ocn_timestep` — and the reverse
@@ -34,7 +34,7 @@ function MOKA.ocn_loss(model::OceanModel, sumGPU, scheme::Checkpointing.Scheme, 
     end
     backend = KA.get_backend(model.Prog.ssh[end])
     n = length(model.Prog.ssh[end])
-    sumKernel! = MOKA.sumArray(backend, 1)
+    sumKernel! = MOKA.sum_array(backend, 1)
     sumKernel!(sumGPU, model.Prog.ssh[end], n, ndrange = 1)
     return nothing
 end
