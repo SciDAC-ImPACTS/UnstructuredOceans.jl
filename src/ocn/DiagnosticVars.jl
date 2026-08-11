@@ -165,9 +165,12 @@ function calculate_thickness_flux!(Diag::DiagnosticVars,
     normalVelocity = Prog.normalVelocity[end]
     @unpack thicknessFlux, layerThicknessEdge = Diag
 
+    nVertLevels = size(normalVelocity)[1]
+    nEdges      = size(normalVelocity)[2]
+
     kernel!  = compute_thickness_flux!(backend, nthreads)
 
-    kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, size(normalVelocity)[2], ndrange=size(normalVelocity)[2])
+    kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, nEdges, ndrange=(nEdges, nVertLevels))
 
     @pack! Diag = thicknessFlux
 end
@@ -177,9 +180,10 @@ end
                                         layerThicknessEdge,
                                         arrayLength)
 
-    j = @index(Global, Linear)
+    # 2-D launch over (nEdges, nVertLevels): thickness flux at every level.
+    j, k = @index(Global, NTuple)
     if j < arrayLength + 1
-        @inbounds thicknessFlux[1,j] = normalVelocity[1,j] * layerThicknessEdge[1,j]
+        @inbounds thicknessFlux[k,j] = normalVelocity[k,j] * layerThicknessEdge[k,j]
     end
 
     @synchronize()

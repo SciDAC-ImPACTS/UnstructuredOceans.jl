@@ -18,8 +18,10 @@ function compute_layer_thickness_tendency!(Tend::TendencyVars,
                                         Mesh::Mesh;
                                         nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendLayerThickness)
+    nCells = Mesh.HorzMesh.PrimaryCells.nCells
+    nVertLevels = Mesh.VertMesh.nVertLevels
     kernel! = ZeroOutVector!(backend, nthreads)
-    kernel!(Tend.tendLayerThickness, Mesh.HorzMesh.PrimaryCells.nCells, ndrange=Mesh.HorzMesh.PrimaryCells.nCells)
+    kernel!(Tend.tendLayerThickness, nCells, ndrange=(nCells, nVertLevels))
 
     # compute horizontal advection of layer thickness
     horizontal_advection_tendency!(

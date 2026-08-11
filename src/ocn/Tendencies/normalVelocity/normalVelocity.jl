@@ -20,8 +20,10 @@ function compute_normal_velocity_tendency!(Tend::TendencyVars,
                                         viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                                         nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Tend.tendNormalVelocity)
+    nEdges = Mesh.HorzMesh.Edges.nEdges
+    nVertLevels = Mesh.VertMesh.nVertLevels
     kernel! = ZeroOutVector!(backend, nthreads)
-    kernel!(Tend.tendNormalVelocity, Mesh.HorzMesh.Edges.nEdges, ndrange=Mesh.HorzMesh.Edges.nEdges)
+    kernel!(Tend.tendNormalVelocity, nEdges, ndrange=(nEdges, nVertLevels))
 
     pressure_gradient_tendency!(
         Tend, Prog, Diag, Mesh, sshGradient; nthreads=nthreads)

@@ -48,6 +48,17 @@ MPAS-Ocean formulation.
     del2 viscosity, and wind forcing. The full nonlinear advection is present in
     the code structure but not yet exercised.
 
+    The core is **multi-layer capable**: every compute kernel loops over the
+    vertical levels bounded by the per-column active levels (`maxLevelEdge`/
+    `maxLevelVertex`, derived from `maxLevelCell`), and the sea-surface height is
+    the column integral of layer thickness. Meshes must be **stacked** (every
+    column full-depth, `maxLevelCell == nVertLevels`); partial-cell / variable-depth
+    masking is not yet implemented and a non-stacked mesh is rejected at load time.
+    The pressure gradient is still **barotropic** (driven by the single-column SSH,
+    applied identically to every layer); baroclinic pressure, tracers, and an
+    equation of state are future work, so multi-layer dynamics beyond stacked
+    passive layers is not yet available.
+
 ## The two verification cases
 
 MOKA ships two configurations with analytic references, taken from the E3SM

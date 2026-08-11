@@ -30,10 +30,12 @@ to write. Julia aims to be both, which makes it a compelling choice for a modern
 GPU-accelerated, differentiable climate model.
 
 !!! note "Physics scope"
-    The current dynamical core integrates the single-layer shallow-water
+    The current dynamical core integrates the (multi-layer) shallow-water
     equations with gravity (pressure gradient), Coriolis, Laplacian (del2)
-    viscosity, and wind-stress forcing. Nonlinear advection is present in the
-    code structure but not yet active.
+    viscosity, and wind-stress forcing. It runs on stacked meshes with
+    `nVertLevels ≥ 1`; the pressure gradient is still barotropic and nonlinear
+    advection, tracers, and baroclinic physics are present in the code structure
+    but not yet active. See [Governing equations](@ref) for details.
 
 ## Installation
 

@@ -229,7 +229,7 @@ function interpolateCell2Edge!(edgeValue, cellValue, Mesh::Mesh; nthreads=DEFAUL
             cellsOnEdge,
             boundaryEdge,
             nEdges,
-            ndrange=nEdges)
+            ndrange=(nEdges, nVertLevels))
 end
 
 @kernel function interpolateCell2Edge(edgeValue,
@@ -237,8 +237,9 @@ end
                                       cellsOnEdge,
                                       boundaryEdge,
                                       arrayLength)
-    iEdge = @index(Global, Linear)
-    k = 1
+    # 2-D launch over (nEdges, nVertLevels) — mirrors DivergenceOnCell! so the
+    # cell→edge average is computed at every vertical level, not just the surface.
+    iEdge, k = @index(Global, NTuple)
 
     if iEdge < arrayLength + 1
         if boundaryEdge[iEdge] != 1
@@ -256,15 +257,16 @@ end
 """
     ZeroOutVector!(vector, arrayLength)
 
-KernelAbstractions kernel that sets the first `arrayLength` entries of `vector`
-(along its second dimension) to zero. Used to clear tendency accumulators before
-summing contributions. Construct for a backend with
-`ZeroOutVector!(backend, nthreads)` and launch with an `ndrange`.
+KernelAbstractions kernel that zeros the first `arrayLength` entries of `vector`
+along its second dimension, at every vertical level. Used to clear tendency
+accumulators before summing contributions. Construct for a backend with
+`ZeroOutVector!(backend, nthreads)` and launch with a 2-D `ndrange`
+`(arrayLength, nVertLevels)`.
 """
 @kernel function ZeroOutVector!(tendNormalVelocity, arrayLength)
-    j = @index(Global, Linear)
+    j, k = @index(Global, NTuple)
     if j < arrayLength + 1
-        tendNormalVelocity[1, j] = 0.0
+        tendNormalVelocity[k, j] = 0.0
     end
     # @synchronize()
 end

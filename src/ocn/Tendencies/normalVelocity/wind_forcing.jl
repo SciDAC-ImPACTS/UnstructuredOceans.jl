@@ -28,6 +28,10 @@ end
 
     iEdge = @index(Global, Linear)
 
+    # Wind stress is a SURFACE flux: it is applied only to the top active layer
+    # (level 1 for every stacked z-level column, where minLevelEdge == 1), unlike
+    # the interior tendencies which loop over all k. Per-column surface indices
+    # (minLevelEdge) only differ from 1 with partial cells, deferred to a later phase.
     if boundaryEdge[iEdge] != 1
         @inbounds tendency[1, iEdge] += windForcingEdge[iEdge] / layerThicknessEdge[1, iEdge]
     end
