@@ -39,9 +39,12 @@ julia examples/plot_resolution_scaling_benchmark.jl
 ```
 
 Select the problem family with the `RES_BENCH_PROBLEM` environment variable
-(`gyre` or `igw`).
+(`gyre` or `igw`). The plot script writes one figure per problem case, with the
+problem name appended before the extension — e.g.
+`resolution_scaling_benchmark_gyre.png` for the forward model and
+`resolution_scaling_ad_benchmark_gyre.png` for the checkpointed adjoint.
 
-![Forward-model runtime versus cell count on each backend](../assets/resolution_scaling_benchmark.png)
+![Forward-model runtime versus cell count on each backend](../assets/resolution_scaling_benchmark_gyre.png)
 
 The GPU backends show favorable sub-linear scaling as resolution increases, in
 contrast to the linear growth on CPU — the same kernels, unchanged, across

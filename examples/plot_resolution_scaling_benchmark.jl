@@ -126,10 +126,13 @@ end
 
 # Row selection for a single problem within one dataset (returns the same named
 # tuple shape as load_csv, so plot_case can treat it like a standalone dataset).
+# Must carry EVERY field load_csv produces — pin_horizon needs `nsteps` and series
+# needs `device`, so dropping them here throws a FieldError downstream.
 function subset_problem(data, prob)
     idx = data.problem .== prob
-    return (backend = data.backend[idx], mode = data.mode[idx],
-            ncells = data.ncells[idx], sstep = data.sstep[idx],
+    return (backend = data.backend[idx], device = data.device[idx],
+            mode = data.mode[idx], ncells = data.ncells[idx],
+            sstep = data.sstep[idx], nsteps = data.nsteps[idx],
             problem = data.problem[idx])
 end
 
