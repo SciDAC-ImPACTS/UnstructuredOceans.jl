@@ -9,7 +9,6 @@ makedocs(;
     sitename = "MOKA.jl",
     format   = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
-        canonical  = "https://GodotMisogi.github.io/Moka.jl",
         edit_link  = "main",
         assets     = String[],
     ),
@@ -38,7 +37,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo      = "github.com/SciDAC/Moka.jl",
+    repo      = "github.com/SciDAC-ImPACTS/Moka.jl",
     devbranch = "main",
     push_preview = true,
 )

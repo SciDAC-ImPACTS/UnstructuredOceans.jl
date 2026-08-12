@@ -153,7 +153,7 @@ function ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Mesh, integrator, cloc
 end
 
 @kernel function sum_array(sumGPU, array, arrayLength)
-    for j = 1:arrayLength
+    @inbounds for j = 1:arrayLength
         sumGPU[1] = sumGPU[1] + array[j]*array[j]
     end
 end
