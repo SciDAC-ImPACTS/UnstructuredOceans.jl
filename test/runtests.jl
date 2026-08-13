@@ -1,14 +1,14 @@
 using Test
-using MOKA
+using UnstructuredOceans
 
 include("utilities.jl")
 
-# GPU tests require the MOKACUDAExt extension to be loaded (CUDA.jl installed)
+# GPU tests require the UnstructuredOceansCUDAExt extension to be loaded (CUDA.jl installed)
 # and actual GPU hardware available (GPU() succeeds).
-const _cuda_ext_loaded = !isnothing(Base.get_extension(MOKA, :MOKACUDAExt))
+const _cuda_ext_loaded = !isnothing(Base.get_extension(UnstructuredOceans, :UnstructuredOceansCUDAExt))
 const _has_gpu = _cuda_ext_loaded && try (GPU(); true) catch; false end
 
-@testset "Moka" begin
+@testset "UnstructuredOceans" begin
 
     @testset "Infrastructure Tests" begin
         include("infra/test_Config.jl")

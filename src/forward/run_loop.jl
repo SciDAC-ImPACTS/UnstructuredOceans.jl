@@ -226,9 +226,9 @@ Scalar objective for reverse-mode automatic differentiation: run the model
 `nsteps` steps under a Checkpointing.jl `scheme` (Revolve) and return
 ``J = \\sum_i \\mathrm{ssh}_i^2`` over all cells at the final time.
 
-This is a function stub; the method is provided by the `MOKACheckpointingExt`
+This is a function stub; the method is provided by the `UnstructuredOceansCheckpointingExt`
 extension, which loads automatically when both `Checkpointing` and `Enzyme` are
-in scope alongside `MOKA`. Differentiating `ocn_loss` with Enzyme yields the
+in scope alongside `UnstructuredOceans`. Differentiating `ocn_loss` with Enzyme yields the
 sensitivity of `J` to the initial state. See the
 [Automatic differentiation](@ref) guide.
 """
@@ -242,8 +242,8 @@ Advance an [`OceanModel`](@ref) `nsteps` steps under a Checkpointing.jl `scheme`
 tape is freed before the next — bounding device-heap use during the reverse
 sweep.
 
-This is a function stub; the method is provided by the `MOKACheckpointingExt`
-extension (requires `Checkpointing` and `Enzyme` loaded alongside `MOKA`). Before
+This is a function stub; the method is provided by the `UnstructuredOceansCheckpointingExt`
+extension (requires `Checkpointing` and `Enzyme` loaded alongside `UnstructuredOceans`). Before
 differentiating on a GPU, raise the in-kernel malloc heap with
 [`set_ad_device_heap!`](@ref). See the [Automatic differentiation](@ref) guide.
 """

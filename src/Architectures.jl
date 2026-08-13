@@ -20,7 +20,7 @@ const DEFAULT_NTHREADS = 64
 """
     AbstractArchitecture
 
-Supertype for the compute architectures MOKA runs on. Concrete subtypes are
+Supertype for the compute architectures UnstructuredOceans runs on. Concrete subtypes are
 [`CPU`](@ref) and [`GPU`](@ref); use [`device`](@ref) to obtain the corresponding
 KernelAbstractions backend.
 """
@@ -37,7 +37,7 @@ abstract type AbstractSerialArchitecture <: AbstractArchitecture end
 """
     CPU <: AbstractSerialArchitecture
 
-Run MOKA on one CPU node.
+Run UnstructuredOceans on one CPU node.
 """
 struct CPU <: AbstractSerialArchitecture end
 
@@ -76,7 +76,7 @@ once the differentiated kernels run at model scale (e.g. the coriolis tendency
 scatters over `nEdges × nEdgesOnEdge` entries); `malloc` then returns NULL and
 the augmented-forward kernel faults with an illegal memory access. Call this
 once, after selecting the backend and before `autodiff`. No-op on CPU and on
-backends that don't need it; the CUDA implementation lives in `MOKACUDAExt`.
+backends that don't need it; the CUDA implementation lives in `UnstructuredOceansCUDAExt`.
 
 Returns the heap size in bytes that is in effect afterwards (or `nothing`).
 """

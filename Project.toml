@@ -1,4 +1,4 @@
-name = "MOKA"
+name = "UnstructuredOceans"
 uuid = "4c5738b9-ea62-4abc-b436-bc5c16744d63"
 version = "0.1.0"
 authors = ["SciDAC Team"]
@@ -31,11 +31,11 @@ Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [extensions]
-MOKAAMDGPUExt = "AMDGPU"
-MOKACUDAExt = "CUDA"
-MOKACheckpointingExt = ["Checkpointing", "Enzyme"]
-MOKAEnzymeExt = "Enzyme"
-MOKAoneAPIExt = "oneAPI"
+UnstructuredOceansAMDGPUExt = "AMDGPU"
+UnstructuredOceansCUDAExt = "CUDA"
+UnstructuredOceansCheckpointingExt = ["Checkpointing", "Enzyme"]
+UnstructuredOceansEnzymeExt = "Enzyme"
+UnstructuredOceansoneAPIExt = "oneAPI"
 
 [compat]
 AMDGPU = "1"

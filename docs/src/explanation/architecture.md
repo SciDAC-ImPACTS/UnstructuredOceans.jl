@@ -1,16 +1,16 @@
 ```@meta
-CurrentModule = MOKA
+CurrentModule = UnstructuredOceans
 ```
 
 # Software architecture
 
-This page explains how MOKA is put together — the module layout, the
+This page explains how UnstructuredOceans is put together — the module layout, the
 performance-portability strategy, and the constraints that keep the model
 differentiable on GPUs.
 
 ## Module layout
 
-The top-level `MOKA` module (`src/MOKA.jl`) includes its components in dependency
+The top-level `UnstructuredOceans` module (`src/UnstructuredOceans.jl`) includes its components in dependency
 order:
 
 - **`Architectures.jl`** — the [`CPU`](@ref)/[`GPU`](@ref) types, backend
@@ -37,8 +37,8 @@ Every compute step is a [KernelAbstractions.jl](https://github.com/JuliaGPU/Kern
 Switching hardware means loading a different vendor package
 ([Choose a compute backend](@ref)) — no source changes. Host↔device transfer is
 handled uniformly through `Adapt.adapt` and [`on_architecture`](@ref). GPU support
-is delivered as package **extensions** (`MOKACUDAExt`, `MOKAAMDGPUExt`,
-`MOKAoneAPIExt`) declared under `[weakdeps]`/`[extensions]` in `Project.toml`,
+is delivered as package **extensions** (`UnstructuredOceansCUDAExt`, `UnstructuredOceansAMDGPUExt`,
+`UnstructuredOceansoneAPIExt`) declared under `[weakdeps]`/`[extensions]` in `Project.toml`,
 so the base package has no hard GPU dependency and the extensions activate only
 when their trigger package is loaded.
 

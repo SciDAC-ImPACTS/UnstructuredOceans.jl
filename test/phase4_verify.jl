@@ -8,14 +8,14 @@
 #   4. WindForcing dispatch is reachable and the forcing tuple is configurable
 #      (empty tuple => no wind tendency, matching wind-off).
 
-using MOKA
+using UnstructuredOceans
 using NCDatasets
 using Printf
 import KernelAbstractions as KA
 using Dates
 using UnPack
 
-const NV = MOKA.NormalVelocity
+const NV = UnstructuredOceans.NormalVelocity
 const BG20 = joinpath(@__DIR__, "..", "examples", "barotropic_gyre", "20km")
 const INIT = joinpath(BG20, "initial_state.nc")
 
@@ -43,7 +43,7 @@ function main()
 
     println(">> ForcingVars projection matches reference")
     h = read_horz_mesh(INIT; backend=backend)
-    f = MOKA.MPASMesh.build_forcing(h, INIT; rho=1000.0, use_wind_stress=true, backend=backend)
+    f = UnstructuredOceans.MPASMesh.build_forcing(h, INIT; rho=1000.0, use_wind_stress=true, backend=backend)
     wref = reference_wind_projection(h; rho=1000.0)
     err = maximum(abs, Array(f.windStressEdge) .- wref) / max(maximum(abs, wref), eps())
     @printf("   rel err vs reference projection = %.3e  (Σ|w| = %.4f)\n", err, sum(abs, wref))
@@ -51,7 +51,7 @@ function main()
     @assert sum(abs, wref) > 0 "reference wind should be nonzero (sanity)"
 
     println(">> use_wind_stress=false yields zero forcing")
-    f0 = MOKA.MPASMesh.build_forcing(h, INIT; use_wind_stress=false, backend=backend)
+    f0 = UnstructuredOceans.MPASMesh.build_forcing(h, INIT; use_wind_stress=false, backend=backend)
     @assert maximum(abs, Array(f0.windStressEdge)) == 0.0 "wind-off forcing must be zero"
 
     println(">> empty ForcingVars + Mesh backward-compat constructors are zeroed")
@@ -67,35 +67,35 @@ function main()
     # Build a full state with wind on; compare the default forcing tuple
     # (WindForcing,) against an empty tuple () — the latter must equal a wind-off run.
     function run(mesh_dir; forcings, wind_in_mesh=true, nsteps=20, dt=1.0)
-        cfg = MOKA.GlobalConfig(); nl = cfg.namelist
-        MOKA.config_add(nl, "time_management", MOKA.yaml_config(Dict{Any,Any}(
+        cfg = UnstructuredOceans.GlobalConfig(); nl = cfg.namelist
+        UnstructuredOceans.config_add(nl, "time_management", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "config_do_restart"=>false, "config_restart_timestamp_name"=>"R",
             "config_start_time"=>DateTime(1,1,1), "config_run_duration"=>"none",
             "config_stop_time"=>DateTime(1,1,1)+Second(nsteps),
             "config_calendar_type"=>"noleap", "config_output_reference_time"=>DateTime(1,1,1))))
-        MOKA.config_add(nl, "time_integration", MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(nl, "time_integration", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "config_dt"=>Second(round(Int,dt)), "config_time_integrator"=>"RungeKutta4",
             "config_number_of_time_levels"=>2)))
-        MOKA.config_add(nl, "forcing", MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(nl, "forcing", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "config_use_bulk_wind_stress"=>wind_in_mesh)))
-        MOKA.config_add(nl, "hmix_del2", MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(nl, "hmix_del2", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "config_use_mom_del2"=>false, "config_mom_del2"=>0.0)))
         st = cfg.streams
         for name in ("mesh","input","forcing")
-            MOKA.config_add(st, name, MOKA.yaml_config(Dict{Any,Any}("filename_template"=>INIT)))
+            UnstructuredOceans.config_add(st, name, UnstructuredOceans.yaml_config(Dict{Any,Any}("filename_template"=>INIT)))
         end
-        MOKA.config_add(st, "output", MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(st, "output", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "filename_template"=>tempname()*".nc", "reference_time"=>DateTime(1,1,1),
             "output_interval"=>Second(nsteps))))
-        Mesh  = MOKA.ocn_setup_mesh(cfg; backend=backend)
-        Clock = MOKA.ocn_setup_clock(cfg)
-        Setup = MOKA.ModelSetup(cfg, Mesh, Clock)
-        Prog  = MOKA.PrognosticVars(cfg, Mesh; backend=backend)
-        Diag  = MOKA.DiagnosticVars(Mesh; backend=backend)
-        Tend  = MOKA.TendencyVars(Mesh; backend=backend)
+        Mesh  = UnstructuredOceans.ocn_setup_mesh(cfg; backend=backend)
+        Clock = UnstructuredOceans.ocn_setup_clock(cfg)
+        Setup = UnstructuredOceans.ModelSetup(cfg, Mesh, Clock)
+        Prog  = UnstructuredOceans.PrognosticVars(cfg, Mesh; backend=backend)
+        Diag  = UnstructuredOceans.DiagnosticVars(Mesh; backend=backend)
+        Tend  = UnstructuredOceans.TendencyVars(Mesh; backend=backend)
         dt_arr = KA.zeros(backend, Float64, 1); dt_arr[1] = dt
         for _ in 1:nsteps
-            MOKA.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4; forcings=forcings)
+            UnstructuredOceans.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4; forcings=forcings)
         end
         return Array(Prog.normalVelocity[end])
     end

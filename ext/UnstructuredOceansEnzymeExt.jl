@@ -1,14 +1,14 @@
-module MOKAEnzymeExt
+module UnstructuredOceansEnzymeExt
 
-using MOKA
+using UnstructuredOceans
 using Enzyme
 import KernelAbstractions as KA
-import MOKA: MPASMesh, Clock, OneTimeAlarm, PeriodicAlarm
+import UnstructuredOceans: MPASMesh, Clock, OneTimeAlarm, PeriodicAlarm
 
 # These `inactive_type` declarations tell Enzyme that the listed types carry no
 # differentiable data. They are general AD-correctness guards (not specific to any
-# one example) and must be in scope whenever MOKA's forward model is differentiated.
-# Shipping them in this package extension means any user who loads both MOKA and
+# one example) and must be in scope whenever UnstructuredOceans's forward model is differentiated.
+# Shipping them in this package extension means any user who loads both UnstructuredOceans and
 # Enzyme gets them automatically, instead of each script having to re-declare them.
 
 # KA Kernel objects (backend + function ref) are not differentiable; marking them
@@ -43,4 +43,4 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:Clock})         = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:OneTimeAlarm})  = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:PeriodicAlarm}) = true
 
-end # module MOKAEnzymeExt
+end # module UnstructuredOceansEnzymeExt

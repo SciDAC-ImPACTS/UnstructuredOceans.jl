@@ -8,7 +8,7 @@
 #   4. config_get(key, default) and config_has behave; a missing required key
 #      raises a friendly error listing available keys.
 
-using MOKA
+using UnstructuredOceans
 using NCDatasets
 using Printf
 using Statistics
@@ -20,9 +20,9 @@ const BG20 = joinpath(@__DIR__, "..", "examples", "barotropic_gyre", "20km")
 function bg_config(mesh_dir; nsteps=50, dt=1.0, wind=true, mixing=true,
                    mom_del2=400.0, gravity=nothing)
     initial = joinpath(mesh_dir, "initial_state.nc")
-    cfg = MOKA.GlobalConfig()
+    cfg = UnstructuredOceans.GlobalConfig()
     nl = cfg.namelist
-    MOKA.config_add(nl, "time_management", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_management", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_do_restart" => false,
         "config_restart_timestamp_name" => "Restart_timestamp",
         "config_start_time" => DateTime(1,1,1,0,0,0),
@@ -31,29 +31,29 @@ function bg_config(mesh_dir; nsteps=50, dt=1.0, wind=true, mixing=true,
         "config_calendar_type" => "noleap",
         "config_output_reference_time" => DateTime(1,1,1,0,0,0),
     )))
-    MOKA.config_add(nl, "time_integration", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_integration", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_dt" => Second(round(Int, dt)),
         "config_time_integrator" => "RungeKutta4",
         "config_number_of_time_levels" => 2,
     )))
-    MOKA.config_add(nl, "forcing", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "forcing", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_bulk_wind_stress" => wind,
     )))
-    MOKA.config_add(nl, "hmix_del2", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "hmix_del2", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_mom_del2" => mixing,
         "config_mom_del2" => mom_del2,
     )))
     if gravity !== nothing
-        MOKA.config_add(nl, "constants", MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(nl, "constants", UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "config_gravity" => gravity,
         )))
     end
     st = cfg.streams
     for name in ("mesh", "input", "forcing")
-        MOKA.config_add(st, name, MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(st, name, UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "filename_template" => initial)))
     end
-    MOKA.config_add(st, "output", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(st, "output", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "filename_template" => tempname() * ".nc",
         "reference_time" => DateTime(1,1,1,0,0,0),
         "output_interval" => Second(round(Int, nsteps*dt)))))
@@ -62,15 +62,15 @@ end
 
 function run_cfg(cfg; nsteps=50, dt=1.0)
     backend = KA.CPU()
-    Mesh  = MOKA.ocn_setup_mesh(cfg; backend=backend)
-    Clock = MOKA.ocn_setup_clock(cfg)
-    Setup = MOKA.ModelSetup(cfg, Mesh, Clock)
-    Prog  = MOKA.PrognosticVars(cfg, Mesh; backend=backend)
-    Diag  = MOKA.DiagnosticVars(Mesh; backend=backend)
-    Tend  = MOKA.TendencyVars(Mesh; backend=backend)
+    Mesh  = UnstructuredOceans.ocn_setup_mesh(cfg; backend=backend)
+    Clock = UnstructuredOceans.ocn_setup_clock(cfg)
+    Setup = UnstructuredOceans.ModelSetup(cfg, Mesh, Clock)
+    Prog  = UnstructuredOceans.PrognosticVars(cfg, Mesh; backend=backend)
+    Diag  = UnstructuredOceans.DiagnosticVars(Mesh; backend=backend)
+    Tend  = UnstructuredOceans.TendencyVars(Mesh; backend=backend)
     dt_arr = KA.zeros(backend, Float64, 1); dt_arr[1] = dt
     for _ in 1:nsteps
-        MOKA.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4)
+        UnstructuredOceans.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4)
     end
     return (ssh = Array(Prog.ssh[end]),
             vel = Array(Prog.normalVelocity[end]),
@@ -82,14 +82,14 @@ fnorm(r) = sum(abs2, r.ssh) + sum(abs2, r.vel)
 function main()
     println(">> Config accessor / validation checks")
     cfg = bg_config(BG20)
-    @assert MOKA.config_has(cfg.namelist, "forcing")
-    @assert !MOKA.config_has(cfg.namelist, "nonexistent_section")
-    fc = MOKA.config_get(cfg.namelist, "forcing")
-    @assert MOKA.config_get(fc, "config_use_bulk_wind_stress", false) == true
-    @assert MOKA.config_get(fc, "missing_key", 42) == 42
+    @assert UnstructuredOceans.config_has(cfg.namelist, "forcing")
+    @assert !UnstructuredOceans.config_has(cfg.namelist, "nonexistent_section")
+    fc = UnstructuredOceans.config_get(cfg.namelist, "forcing")
+    @assert UnstructuredOceans.config_get(fc, "config_use_bulk_wind_stress", false) == true
+    @assert UnstructuredOceans.config_get(fc, "missing_key", 42) == 42
     threw = false
     try
-        MOKA.config_get(cfg.namelist, "definitely_missing")
+        UnstructuredOceans.config_get(cfg.namelist, "definitely_missing")
     catch e
         threw = true
         msg = sprint(showerror, e)

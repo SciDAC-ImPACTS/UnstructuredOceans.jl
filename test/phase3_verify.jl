@@ -9,7 +9,7 @@
 #      from linearCoriolis (it adds nonlinear advection + KE gradient).
 #   3. Forward-mode Enzyme AD through a vectorInvariant step works (rel err vs FD).
 
-using MOKA
+using UnstructuredOceans
 using NCDatasets
 using Printf
 using Statistics
@@ -18,15 +18,15 @@ using Dates
 using Enzyme
 using UnPack
 
-const NV = MOKA.NormalVelocity
+const NV = UnstructuredOceans.NormalVelocity
 const BG20 = joinpath(@__DIR__, "..", "examples", "barotropic_gyre", "20km")
 
 # --- shared config builder (wind off, mixing off: isolate the advection term) ---
 function bg_config(mesh_dir; nsteps=10, dt=1.0)
     initial = joinpath(mesh_dir, "initial_state.nc")
-    cfg = MOKA.GlobalConfig()
+    cfg = UnstructuredOceans.GlobalConfig()
     nl = cfg.namelist
-    MOKA.config_add(nl, "time_management", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_management", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_do_restart" => false,
         "config_restart_timestamp_name" => "Restart_timestamp",
         "config_start_time" => DateTime(1,1,1,0,0,0),
@@ -34,20 +34,20 @@ function bg_config(mesh_dir; nsteps=10, dt=1.0)
         "config_run_duration" => "none",
         "config_calendar_type" => "noleap",
         "config_output_reference_time" => DateTime(1,1,1,0,0,0))))
-    MOKA.config_add(nl, "time_integration", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_integration", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_dt" => Second(round(Int, dt)),
         "config_time_integrator" => "RungeKutta4",
         "config_number_of_time_levels" => 2)))
-    MOKA.config_add(nl, "forcing", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "forcing", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_bulk_wind_stress" => false)))
-    MOKA.config_add(nl, "hmix_del2", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "hmix_del2", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_mom_del2" => false, "config_mom_del2" => 0.0)))
     st = cfg.streams
     for name in ("mesh", "input", "forcing")
-        MOKA.config_add(st, name, MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(st, name, UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "filename_template" => initial)))
     end
-    MOKA.config_add(st, "output", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(st, "output", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "filename_template" => tempname() * ".nc",
         "reference_time" => DateTime(1,1,1,0,0,0),
         "output_interval" => Second(round(Int, nsteps*dt)))))
@@ -56,12 +56,12 @@ end
 
 function build_state(mesh_dir; nVertLevels_hint=nothing, nsteps=10, dt=1.0, backend=KA.CPU())
     cfg   = bg_config(mesh_dir; nsteps=nsteps, dt=dt)
-    Mesh  = MOKA.ocn_setup_mesh(cfg; backend=backend)
-    Clock = MOKA.ocn_setup_clock(cfg)
-    Setup = MOKA.ModelSetup(cfg, Mesh, Clock)
-    Prog  = MOKA.PrognosticVars(cfg, Mesh; backend=backend)
-    Diag  = MOKA.DiagnosticVars(Mesh; backend=backend)
-    Tend  = MOKA.TendencyVars(Mesh; backend=backend)
+    Mesh  = UnstructuredOceans.ocn_setup_mesh(cfg; backend=backend)
+    Clock = UnstructuredOceans.ocn_setup_clock(cfg)
+    Setup = UnstructuredOceans.ModelSetup(cfg, Mesh, Clock)
+    Prog  = UnstructuredOceans.PrognosticVars(cfg, Mesh; backend=backend)
+    Diag  = UnstructuredOceans.DiagnosticVars(Mesh; backend=backend)
+    Tend  = UnstructuredOceans.TendencyVars(Mesh; backend=backend)
     return (; Setup, Mesh, Prog, Diag, Tend)
 end
 
@@ -81,7 +81,7 @@ function check_reconstructions()
     hconst = 1234.5
     layerThickness = fill(hconst, nVertLevels, nCells)
     hv = KA.zeros(backend, Float64, nVertLevels, nVertices)
-    k! = NV.layer_thickness_vertex!(backend, MOKA.DEFAULT_NTHREADS)
+    k! = NV.layer_thickness_vertex!(backend, UnstructuredOceans.DEFAULT_NTHREADS)
     k!(hv, layerThickness, DualCells.cellsOnVertex, DualCells.kiteAreasOnVertex,
        DualCells.areaTriangle, DualCells.vertexDegree, nVertices,
        ndrange=(nVertices, nVertLevels))
@@ -96,7 +96,7 @@ function check_reconstructions()
     relVort = KA.zeros(backend, Float64, nVertLevels, nVertices)  # zero velocity
     pv = KA.zeros(backend, Float64, nVertLevels, nVertices)
     hv_dev = KA.zeros(backend, Float64, nVertLevels, nVertices); copyto!(hv_dev, reshape(repeat(hv[1,:], nVertLevels), nVertLevels, nVertices) )
-    kp! = NV.potential_vorticity_vertex!(backend, MOKA.DEFAULT_NTHREADS)
+    kp! = NV.potential_vorticity_vertex!(backend, UnstructuredOceans.DEFAULT_NTHREADS)
     kp!(pv, relVort, hv_dev, DualCells.fᵛ, nVertices, ndrange=(nVertices, nVertLevels))
     pv = Array(pv)
     fv = DualCells.fᵛ
@@ -109,7 +109,7 @@ function check_reconstructions()
     # --- kinetic_energy_cell!: zero velocity → 0; nonzero → ≥ 0 ---
     kez = KA.zeros(backend, Float64, nVertLevels, nCells)
     uvel = KA.zeros(backend, Float64, nVertLevels, nEdges)
-    ke! = NV.kinetic_energy_cell!(backend, MOKA.DEFAULT_NTHREADS)
+    ke! = NV.kinetic_energy_cell!(backend, UnstructuredOceans.DEFAULT_NTHREADS)
     ke!(kez, uvel, PrimaryCells.nEdgesOnCell, PrimaryCells.edgesOnCell,
         Edges.dcEdge, Edges.dvEdge, PrimaryCells.areaCell, nCells,
         ndrange=(nCells, nVertLevels))
@@ -152,7 +152,7 @@ function run_step(mesh_dir; coriolis, nsteps=10, dt=1.0)
     seed_structured!(s)
     dt_arr = KA.zeros(backend, Float64, 1); dt_arr[1] = dt
     for _ in 1:nsteps
-        MOKA.ocn_timestep(dt_arr, s.Prog, s.Diag, s.Tend, s.Mesh, RungeKutta4;
+        UnstructuredOceans.ocn_timestep(dt_arr, s.Prog, s.Diag, s.Tend, s.Mesh, RungeKutta4;
                           coriolis=coriolis)
     end
     return (ssh=Array(s.Prog.ssh[end]), vel=Array(s.Prog.normalVelocity[end]))
@@ -180,7 +180,7 @@ function check_ad()
 
     function loss!(viscDel2_arr, Prog, Diag, Tend, Mesh, dt_arr, nsteps)
         for _ in 1:nsteps
-            MOKA.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4;
+            UnstructuredOceans.ocn_timestep(dt_arr, Prog, Diag, Tend, Mesh, RungeKutta4;
                               coriolis=NV.vectorInvariant, viscDel2=viscDel2_arr)
         end
         return sum(abs2, Prog.normalVelocity[end])
@@ -212,7 +212,7 @@ function check_ad()
         vv = KA.zeros(backend, Float64, 1); vv[1] = visc
         st = mk()
         for _ in 1:nsteps
-            MOKA.ocn_timestep(dt_arr, st.Prog, st.Diag, st.Tend, st.Mesh, RungeKutta4;
+            UnstructuredOceans.ocn_timestep(dt_arr, st.Prog, st.Diag, st.Tend, st.Mesh, RungeKutta4;
                               coriolis=NV.vectorInvariant, viscDel2=vv)
         end
         sum(abs2, st.Prog.normalVelocity[end])

@@ -2,7 +2,7 @@ using Test
 using Dates
 import KernelAbstractions as KA
 using Enzyme
-using MOKA
+using UnstructuredOceans
 using CUDA
 import CUDA: @allowscalar
 CUDA.device!(1)
@@ -33,7 +33,7 @@ function ocn_run_with_fwd_ad(config_fp, k, backend)
 
     Mesh = Setup.mesh
     integrator = parse_integrator(
-        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+        UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
 
     nsteps = _nsteps(Setup)
@@ -83,7 +83,7 @@ function ocn_run_fd(config_fp, k, backend; h = 10.0)
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
         Mesh = Setup.mesh
         integrator = parse_integrator(
-            MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+            UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                            "config_time_integrator"))
         nsteps = _nsteps(Setup)
         viscDel2 = KA.zeros(backend, Float64, (1,))

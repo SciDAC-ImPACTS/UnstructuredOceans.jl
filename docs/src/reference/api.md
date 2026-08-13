@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = MOKA
+CurrentModule = UnstructuredOceans
 ```
 
 # API
 
-The public API of MOKA, grouped by role. All symbols listed here are exported.
+The public API of UnstructuredOceans, grouped by role. All symbols listed here are exported.
 
 ```@contents
 Pages = ["api.md"]
@@ -89,7 +89,7 @@ ocn_init_shadows
 ## Tendencies
 
 ```@docs
-MOKA.NormalVelocity.compute_normal_velocity_tendency!
+UnstructuredOceans.NormalVelocity.compute_normal_velocity_tendency!
 ```
 
 ## Run loop and automatic differentiation

@@ -23,10 +23,10 @@ using Dates
 import KernelAbstractions as KA
 using Enzyme
 using Checkpointing
-using MOKA
+using UnstructuredOceans
 using CUDA
 import CUDA: @allowscalar
-import MOKA.MPASMesh
+import UnstructuredOceans.MPASMesh
 
 const DEV = parse(Int, get(ENV, "CUDA_PROFILE_DEVICE", "0"))
 CUDA.device!(DEV)
@@ -61,7 +61,7 @@ function build_model(backend)
     timestep = KA.zeros(backend, Float64, (1,))
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
     integrator = parse_integrator(
-        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+        UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
     model   = OceanModel(integrator, Prog, Diag, Tend, Setup.mesh, timestep)
     d_model = OceanModel(integrator,

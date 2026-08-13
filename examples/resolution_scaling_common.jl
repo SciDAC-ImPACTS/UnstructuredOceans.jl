@@ -8,7 +8,7 @@
 # the device malloc-heap sizing (AD only) live in the two entry-point scripts.
 #
 # NB: this file is `include`d, not `using`d — it assumes the caller has already
-# brought MOKA, KernelAbstractions, BenchmarkTools, Dates, DelimitedFiles and
+# brought UnstructuredOceans, KernelAbstractions, BenchmarkTools, Dates, DelimitedFiles and
 # Printf into scope. Only the AD script additionally loads Enzyme +
 # Checkpointing, so nothing here may reference them.
 #
@@ -126,7 +126,7 @@ const INTEGRATOR_OVERRIDE = haskey(ENV, "RES_BENCH_INTEGRATOR") ?
 # the time_integration group.
 function case_integrator(Setup)
     INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
-    ti = MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+    ti = UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                         "config_time_integrator")
     return parse_integrator(ti)
 end
@@ -136,8 +136,8 @@ end
 # before ocn_init, since cuCtxSetLimit(MALLOC_HEAP_SIZE) fails once the context is in use.
 function config_integrator(dir, config)
     INTEGRATOR_OVERRIDE === nothing || return INTEGRATOR_OVERRIDE
-    cfg = MOKA.config_read(joinpath(dir, config))
-    ti  = MOKA.config_get(MOKA.config_get(cfg.namelist, "time_integration"),
+    cfg = UnstructuredOceans.config_read(joinpath(dir, config))
+    ti  = UnstructuredOceans.config_get(UnstructuredOceans.config_get(cfg.namelist, "time_integration"),
                          "config_time_integrator")
     return parse_integrator(ti)
 end

@@ -5,7 +5,7 @@ export compute_layer_thickness_tendency!
 using UnPack
 using KernelAbstractions 
 using GPUArraysCore: @allowscalar
-using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!,
+using UnstructuredOceans: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!,
             DEFAULT_NTHREADS
 
 const KA = KernelAbstractions

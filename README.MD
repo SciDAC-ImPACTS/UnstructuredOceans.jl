@@ -1,6 +1,6 @@
-# :coffee: `Moka.jl`: MPAS Ocean (using) kernel abstractions 
+# `UnstructuredOceans.jl`: a differentiable, performance-portable ocean dynamical core
 
-[![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://SCIgithub.io/Moka.jl/)
+[![Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://SciDAC-ImPACTS.github.io/UnstructuredOceans.jl/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7493065.svg)](https://doi.org/10.5281/zenodo.7493065)
 
 An ocean model capable of running on irregular, non-rectilinear, TRiSK-based meshes. Inspired by MPAS-Ocean in Fortran.
@@ -8,8 +8,8 @@ An ocean model capable of running on irregular, non-rectilinear, TRiSK-based mes
 ## Quickstart
 
 ```bash
-git clone https://https://github.com/SciDAC-ImPACTS/Moka.jl MOKA.jl
-cd MOKA.jl
+git clone https://github.com/SciDAC-ImPACTS/UnstructuredOceans.jl UnstructuredOceans.jl
+cd UnstructuredOceans.jl
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 

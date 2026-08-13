@@ -1,6 +1,6 @@
 # Run the benchmarks
 
-MOKA ships a benchmark suite under `examples/` that measures forward-model and
+UnstructuredOceans ships a benchmark suite under `examples/` that measures forward-model and
 AD runtime as a function of mesh resolution and hardware backend. All scripts use
 [BenchmarkTools.jl](https://github.com/JuliaCI/BenchmarkTools.jl) (warm-up outside
 the timed region, minimum-over-samples estimator) and append to CSVs stamped with

@@ -1,16 +1,16 @@
 ```@meta
-CurrentModule = MOKA
+CurrentModule = UnstructuredOceans
 ```
 
-# MOKA.jl
+# UnstructuredOceans.jl
 
-**MOKA.jl** (*MPAS Ocean using Kernel Abstractions*) is a performance-portable,
+**UnstructuredOceans.jl** (*MPAS Ocean using Kernel Abstractions*) is a performance-portable,
 differentiable shallow-water ocean dynamical core written in Julia. It
 discretizes the shallow-water equations with the **TRiSK** scheme on unstructured
 Voronoi (**MPAS**) meshes, following the design of the Fortran
 [MPAS-Ocean](https://mpas-dev.github.io/) model, the ocean component of E3SM.
 
-## Why MOKA
+## Why UnstructuredOceans
 
 - **Performance portable.** Every compute kernel is written once with
   [KernelAbstractions.jl](https://github.com/JuliaGPU/KernelAbstractions.jl) and
@@ -63,7 +63,7 @@ Pkg.add(["Enzyme", "Checkpointing"])    # reverse-mode AD
 
 ## Citing
 
-MOKA.jl is described in *"Portable, High-Performance and Differentiable Ocean
+UnstructuredOceans.jl is described in *"Portable, High-Performance and Differentiable Ocean
 Simulations with Unstructured Grids in Julia"* (Seth et al.). If you use the
 package in academic work, please cite that paper and the archived software
 release.

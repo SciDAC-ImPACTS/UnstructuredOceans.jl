@@ -4,10 +4,10 @@ import KernelAbstractions as KA
 using Enzyme
 using Checkpointing
 using FiniteDifferences
-using MOKA
+using UnstructuredOceans
 using CUDA
 import CUDA: @allowscalar
-import MOKA.MPASMesh
+import UnstructuredOceans.MPASMesh
 
 # %%
 function ocn_run_with_ad(config_fp, k, backend)
@@ -19,7 +19,7 @@ function ocn_run_with_ad(config_fp, k, backend)
     Mesh = Setup.mesh
 
     integrator = parse_integrator(
-        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+        UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
 
     # Number of fixed-size timesteps from start until the simulation-end alarm.
@@ -45,7 +45,7 @@ function ocn_run_with_ad(config_fp, k, backend)
     write_netcdf(Setup, Diag, Prog, d_Prog)
 
     arch = typeof(backend) <: KA.GPU ? "GPU" : "CPU"
-    println("Moka.jl ran on $arch")
+    println("UnstructuredOceans.jl ran on $arch")
     println(clock.currTime)
     return @allowscalar(d_Prog.layerThickness[end][1, k]), @allowscalar(d_Prog.normalVelocity[end][1, k])
 end
@@ -66,7 +66,7 @@ function ocn_run_fd(config_fp, k, backend)
         sumGPU   = KA.zeros(backend, Float64, (1,))
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
         integrator = parse_integrator(
-            MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+            UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                            "config_time_integrator"))
         perturb!(Prog)
         ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, integrator,

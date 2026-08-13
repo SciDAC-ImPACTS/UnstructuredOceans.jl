@@ -2,7 +2,7 @@ using Test
 using Dates
 import KernelAbstractions as KA
 using Enzyme
-using MOKA
+using UnstructuredOceans
 using CUDA
 import CUDA: @allowscalar
 using Optimization
@@ -63,7 +63,7 @@ function GyreProblem(config_fp, backend)
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
     Mesh = Setup.mesh
     integrator = parse_integrator(
-        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+        UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
     nsteps = _nsteps(Setup)
     return GyreProblem(Setup, Diag, Tend, Prog, timestep, Mesh, integrator, nsteps, backend)

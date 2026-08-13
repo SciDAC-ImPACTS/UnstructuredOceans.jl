@@ -116,8 +116,8 @@ function ocn_timestep(dt,
                       Tend::TendencyVars,
                       Mesh::Mesh,
                       ::Type{RungeKutta4};
-                      coriolis=MOKA.NormalVelocity.linearCoriolis,
-                      forcings=(MOKA.NormalVelocity.WindForcing,),
+                      coriolis=UnstructuredOceans.NormalVelocity.linearCoriolis,
+                      forcings=(UnstructuredOceans.NormalVelocity.WindForcing,),
                       viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                       nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
@@ -227,8 +227,8 @@ function ocn_timestep(timestep,
                       Tend::TendencyVars,
                       Mesh::Mesh,
                       ::Type{ForwardEuler};
-                      coriolis=MOKA.NormalVelocity.linearCoriolis,
-                      forcings=(MOKA.NormalVelocity.WindForcing,),
+                      coriolis=UnstructuredOceans.NormalVelocity.linearCoriolis,
+                      forcings=(UnstructuredOceans.NormalVelocity.WindForcing,),
                       viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
                       nthreads=DEFAULT_NTHREADS)
     backend = KernelAbstractions.get_backend(Prog.ssh[end])
