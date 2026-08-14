@@ -1,6 +1,6 @@
 using Test
 using CUDA
-using MOKA
+using UnstructuredOceans
 using UnPack
 using CUDA: @allowscalar
 using Enzyme
@@ -13,7 +13,7 @@ import Downloads
 import KernelAbstractions as KA
 
 mesh_url = "https://gist.github.com/mwarusz/f8caf260398dbe140d2102ec46a41268/raw/e3c29afbadc835797604369114321d93fd69886d/PlanarPeriodic48x48.nc"
-mesh_fn  = "MokaMesh.nc"
+mesh_fn  = "UnstructuredOceansMesh.nc"
 
 Downloads.download(mesh_url, mesh_fn)
 
@@ -22,7 +22,7 @@ backends = [KA.CPU(), CUDABackend()]
 for backend in backends
     @show backend
     # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
+    HorzMesh = read_horz_mesh(mesh_fn; backend=backend)
     # Create a dummy vertical mesh from the horizontal mesh
     VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
     # Create a the full Mesh strucutre 
@@ -64,7 +64,7 @@ for backend in backends
     @allowscalar dnorm_dscalar_rev = d_Scalar[kBegin]
 
     # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
+    HorzMesh = read_horz_mesh(mesh_fn; backend=backend)
     # Create a dummy vertical mesh from the horizontal mesh
     VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
     # Create a the full Mesh strucutre 
@@ -97,7 +97,7 @@ for backend in backends
     @allowscalar dnorm_dscalar_fwd = d_gradNum[kEnd]
 
 
-    HorzMeshFD = ReadHorzMesh(mesh_fn; backend=backend)
+    HorzMeshFD = read_horz_mesh(mesh_fn; backend=backend)
     MPASMeshFD = Mesh(HorzMeshFD, VertMesh)
     ϵ = 1e-8
 
@@ -161,7 +161,7 @@ for backend in backends
                         Const(backend))
     @allowscalar dnorm_dvecedge_rev    = d_VecEdge[kBegin]
     # Read in the purely horizontal doubly periodic testing mesh
-    HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
+    HorzMesh = read_horz_mesh(mesh_fn; backend=backend)
     # Create a dummy vertical mesh from the horizontal mesh
     VertMesh = VerticalMesh(HorzMesh; nVertLevels=1, backend=backend)
     # Create a the full Mesh strucutre 
@@ -191,7 +191,7 @@ for backend in backends
     @test fwd_mode
 
     @allowscalar dnorm_dvecedge_fwd = d_divNum[kEnd]
-    HorzMeshFD = ReadHorzMesh(mesh_fn; backend=backend)
+    HorzMeshFD = read_horz_mesh(mesh_fn; backend=backend)
     MPASMeshFD = Mesh(HorzMeshFD, VertMesh)
     ϵ = 1e-8
     # For comparison, let's compute the derivative by hand for a given VecEdge entry:

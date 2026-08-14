@@ -157,30 +157,30 @@ Base.@kwdef struct Mesh{dp,i1,i4}
     vertexMask::Array{i4,2} = zeros(i4, nVertLevels, nVertices)
 end 
 
-function ReadMesh(meshPath::String)
+function read_mesh(meshPath::String)
     # read the NetCDF
     ds_mesh = NCDataset(meshPath, "r", format=:netcdf4) 
     
     # create a dictionary of the mesh dimension values for 
     # structure construction
-    dims_dict = getDimensionInfo(ds_mesh)
+    dims_dict = get_dimension_info(ds_mesh)
 
     # return an instance of the `Mesh` struct
     mesh = Mesh{Float64, Int8, Int32}(; dims_dict...)
 
     # populate the mesh with the input fields from the file
-    readMeshFields!(mesh, ds_mesh)
+    read_mesh_fields!(mesh, ds_mesh)
     
     # sign and index fields 
-    meshSignIndexFields!(mesh)
+    mesh_sign_index_fields!(mesh)
     # compute min/max levels for edges and vertices 
-    meshMinMaxLevel!(mesh) 
+    mesh_min_max_level!(mesh) 
     ## find boundaries 
-    #meshMarkBoundaries!(mesh)
+    #mesh_mark_boundaries!(mesh)
     return mesh
 end 
 
-function getDimensionInfo(ds_mesh::NCDataset)
+function get_dimension_info(ds_mesh::NCDataset)
     """ Method creates a dictionary of the mesh info to be used 
         for immutable strcutre creation
     """
@@ -199,7 +199,7 @@ function getDimensionInfo(ds_mesh::NCDataset)
     return dims_dict
 end 
 
-function readMeshFields!(mesh::Mesh, ds_mesh::NCDataset)
+function read_mesh_fields!(mesh::Mesh, ds_mesh::NCDataset)
     
     dims = [:nCells, 
             :nEdges, 
@@ -230,7 +230,7 @@ function readMeshFields!(mesh::Mesh, ds_mesh::NCDataset)
 end
 
 
-function meshSignIndexFields!(mesh::Mesh)
+function mesh_sign_index_fields!(mesh::Mesh)
     
     @unpack nCells, nEdgesOnCell, nVertices, vertexDegree = mesh 
     @unpack edgesOnCell, edgesOnVertex = mesh 
@@ -274,7 +274,7 @@ function meshSignIndexFields!(mesh::Mesh)
     mesh.edgeSignOnVertex .= edgeSignOnVertex
 end 
 
-function meshMinMaxLevel!(mesh::Mesh)
+function mesh_min_max_level!(mesh::Mesh)
     
     @unpack nEdges, nVertices, vertexDegree = mesh
     @unpack cellsOnEdge, cellsOnVertex, maxLevelCell = mesh 
@@ -336,7 +336,7 @@ function meshMinMaxLevel!(mesh::Mesh)
 end 
 
 
-function meshMarkBoundaries!(mesh::Mesh)
+function mesh_mark_boundaries!(mesh::Mesh)
     @unpack boundaryEdge, boundaryCell, boundaryVertex = mesh
     @unpack edgeMask, cellMask, vertexMask = mesh 
     @unpack cellsOnEdge, verticesOnEdge = mesh 

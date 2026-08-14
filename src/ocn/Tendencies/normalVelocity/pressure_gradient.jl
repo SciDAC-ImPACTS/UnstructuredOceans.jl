@@ -1,65 +1,65 @@
 # define our parent abstract type 
-abstract type PresssureGradient end
+abstract type PressureGradient end
 
 using KernelAbstractions
 const KA=KernelAbstractions
 
 # define the supported PressureGradient types to dispatch on. 
-abstract type sshGradient <: PresssureGradient end 
+abstract type sshGradient <: PressureGradient end 
 
-function pressure_gradient_tendency!(Tend::TendencyVars, 
+function pressure_gradient_tendency!(Tend::TendencyVars,
                                      Prog::PrognosticVars,
-                                     Diag::DiagnosticVars, 
-                                     Mesh::Mesh, 
+                                     Diag::DiagnosticVars,
+                                     Mesh::Mesh,
                                      ::Type{sshGradient};
-                                     backend = KA.CPU())
+                                     nthreads=DEFAULT_NTHREADS)
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
-    @unpack HorzMesh, VertMesh = Mesh    
+    @unpack HorzMesh, VertMesh = Mesh
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
 
-    @unpack maxLevelEdge = VertMesh 
-    @unpack nEdges, dcEdge, cellsOnEdge = Edges
-   
-    # get the current timelevel of ssh 
-    ssh = Prog.ssh[end] #[:,end]
-    # unpack the normal velocity tendency term
-    @unpack tendNormalVelocity = Tend 
-    
-    # initialize the kernel
-    nthreads = 50
+    @unpack maxLevelEdge = VertMesh
+    @unpack nEdges, dcEdge, cellsOnEdge, boundaryEdge = Edges
+
+    # gravity as a 1-element (inactive) device array, like momentumDel2 — a bare
+    # Float64 kernel arg is classified Active by Enzyme reverse mode.
+    gravity = Mesh.Constants.gravity
+
+    ssh = Prog.ssh[end]
+    @unpack tendNormalVelocity = Tend
+
     kernel! = SSHGradOnEdge!(backend, nthreads)
-    # use kernel to compute gradient
     kernel!(tendNormalVelocity,
             ssh,
             cellsOnEdge,
             dcEdge,
+            boundaryEdge,
             maxLevelEdge.Top,
+            gravity,
             ndrange=nEdges)
-    # sync the backend 
-    KA.synchronize(backend)
-    
-    # pack the tendecy pack into the struct for further computation
-    @pack! Tend = tendNormalVelocity 
+
+    @pack! Tend = tendNormalVelocity
 end
 
 @kernel function SSHGradOnEdge!(tendency,
-                                @Const(ssh),
-                                @Const(cellsOnEdge), 
-                                @Const(dcEdge), 
-                                @Const(maxLevelEdgeTop))
+                                ssh,
+                                cellsOnEdge,
+                                dcEdge,
+                                boundaryEdge,
+                                maxLevelEdgeTop,
+                                gravity)
 
-    # global indices over nEdges
     iEdge = @index(Global, Linear)
 
-    # cell connectivity information for iEdge
-    @inbounds jCell1 = cellsOnEdge[1,iEdge]      
-    @inbounds jCell2 = cellsOnEdge[2,iEdge]
-    
-    # inverse edge spacing for iEdge
-    @inbounds InvDcEdge = 1. / dcEdge[iEdge]
-  
-    for k in 1:maxLevelEdgeTop[iEdge]
-        # gradient on edges calculation 
-        tendency[k, iEdge] -= 9.80616 * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
+    if boundaryEdge[iEdge] != 1
+        @inbounds jCell1 = cellsOnEdge[1,iEdge]
+        @inbounds jCell2 = cellsOnEdge[2,iEdge]
+
+        @inbounds InvDcEdge = 1.0 / dcEdge[iEdge]
+
+        @inbounds g = gravity[1]
+        for k in 1:maxLevelEdgeTop[iEdge]
+            tendency[k, iEdge] -= g * InvDcEdge * (ssh[jCell2] - ssh[jCell1])
+        end
     end
 end

@@ -1,0 +1,67 @@
+omega:
+  run_modes:
+    config_ocean_run_mode: forward
+  time_management:
+    config_do_restart: false
+    config_restart_timestamp_name: Restart_timestamp
+    config_start_time: 0001-01-01_00:00:00
+    config_stop_time: none
+    config_run_duration: 0020_00:00:00
+    config_calendar_type: noleap
+    config_output_reference_time: 0001-01-01_00:00:00
+  io:
+    config_write_output_on_startup: true
+    config_pio_num_iotasks: 0
+    config_pio_stride: 1
+  decomposition:
+    config_num_halos: 3
+    config_block_decomp_file_prefix: graph.info.part.
+    config_number_of_blocks: 0
+    config_explicit_proc_decomp: false
+    config_proc_decomp_file_prefix: graph.info.part.
+  time_integration:
+    config_dt: 0000_00:00:40
+    config_time_integrator: RungeKutta4
+    config_number_of_time_levels: 2
+  forcing:
+    config_use_bulk_wind_stress: true
+  hmix_del2:
+    config_use_mom_del2: true
+    config_mom_del2: 400.0
+  streams:
+    mesh:
+      type: input
+      filename_template: initial_state.nc
+      input_interval: initial_only
+    input:
+      type: input
+      filename_template: initial_state.nc
+      input_interval: initial_only
+    forcing:
+      type: input
+      filename_template: initial_state.nc
+      input_interval: initial_only
+      contents:
+      - windStressZonal
+      - windStressMeridional
+    restart:
+      type: input;output
+      filename_template: restarts/restart.$Y-$M-$D_$h.$m.$s.nc
+      filename_interval: output_interval
+      reference_time: 0001-01-01_00:00:00
+      clobber_mode: truncate
+      input_interval: initial_only
+      output_interval: 0365_00:00:00
+    output:
+      type: output
+      filename_template: output.nc
+      filename_interval: 01-00-00_00:00:00
+      reference_time: 0001-01-01_00:00:00
+      clobber_mode: truncate
+      precision: double
+      output_interval: 0030_00:00:00
+      contents:
+      - xtime
+      - normalVelocity
+      - layerThickness
+      - ssh

@@ -11,3 +11,30 @@ InertiaGravityWaveMesh.tar.gz
 InertiaGravityWaveMesh/
 output.tar.gz
 sbatch_logs/
+
+# MacOS files
+.DS_Store
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# NetCDF output files
+*.nc
+
+# Custom
+_research/
+
+# Overleaf paper clone (has its own .git; not part of the package)
+paper/
+
+# Documenter build output
+docs/build/
+docs/Manifest.toml
