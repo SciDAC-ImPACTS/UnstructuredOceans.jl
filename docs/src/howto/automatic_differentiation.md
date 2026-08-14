@@ -1,6 +1,6 @@
 # Automatic differentiation
 
-MOKA is differentiable end-to-end with [Enzyme.jl](https://enzyme.mit.edu/julia/).
+UnstructuredOceans is differentiable end-to-end with [Enzyme.jl](https://enzyme.mit.edu/julia/).
 Two modes are supported:
 
 - **Forward mode** — cheap for a few inputs; used here to differentiate the final
@@ -15,10 +15,10 @@ Both are validated against finite differences in `examples/`.
 
 ## Prerequisites
 
-Load the AD packages alongside `MOKA` so the extensions activate:
+Load the AD packages alongside `UnstructuredOceans` so the extensions activate:
 
 ```julia
-using MOKA
+using UnstructuredOceans
 using Enzyme
 using Checkpointing         # for reverse mode
 ```

@@ -1,6 +1,6 @@
 # Governing equations
 
-MOKA integrates the **shallow-water equations** for layer thickness ``h`` and
+UnstructuredOceans integrates the **shallow-water equations** for layer thickness ``h`` and
 horizontal velocity ``\mathbf{v}``, under boundary conditions set by the problem:
 
 ```math
@@ -65,7 +65,7 @@ MPAS-Ocean formulation.
 
 ## The two verification cases
 
-MOKA ships two configurations with analytic references, taken from the E3SM
+UnstructuredOceans ships two configurations with analytic references, taken from the E3SM
 Polaris tasks so the initial and forcing conditions match an established
 implementation.
 

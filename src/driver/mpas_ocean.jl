@@ -1,12 +1,12 @@
 # %%
 using Dates
-using MOKA
+using UnstructuredOceans
 using Statistics
 import KernelAbstractions as KA
 using GPUArraysCore: @allowscalar
 
 function ocn_run(config_fp, arch::AbstractArchitecture = CPU())
-    backend = MOKA.device(arch)
+    backend = UnstructuredOceans.device(arch)
     println("Setting the backend...")
     @show backend
 
@@ -18,7 +18,7 @@ function ocn_run(config_fp, arch::AbstractArchitecture = CPU())
     timestep = KA.zeros(backend, Float64, (1,))
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
 
-    ti_str = MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"), "config_time_integrator")
+    ti_str = UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"), "config_time_integrator")
     integrator = parse_integrator(ti_str)
     println("Time integrator: $integrator")
     output_ds = io_initialize(Setup, Prog)
@@ -27,7 +27,7 @@ function ocn_run(config_fp, arch::AbstractArchitecture = CPU())
 
     arch_str = arch isa GPU ? "GPU" : "CPU"
 
-    println("Moka.jl ran on $arch_str")
+    println("UnstructuredOceans.jl ran on $arch_str")
     println(clock.currTime)
 end
 

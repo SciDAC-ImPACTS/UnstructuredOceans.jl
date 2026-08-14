@@ -8,7 +8,7 @@
 #SBATCH -t 04:00:00
 
 # replace this path with the path to the git repo
-gitdir="/disk/aseth/MOKA.jl"
+gitdir="/disk/aseth/UnstructuredOceans.jl"
 driver="src/driver/mpas_ocean.jl"
 execut="${gitdir}/${driver}"
 
@@ -21,7 +21,7 @@ for dir in 40km 20km 10km 5km 2.5km; do
     python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
 
     cd $dir
-    cp ../Moka.yaml ./config.yml
+    cp ../UnstructuredOceans.yaml ./config.yml
 
     # Scale dt linearly with cell width to hold the surface-gravity-wave CFL
     # constant (c = sqrt(gH) ~ 221 m/s; at 10 km / 40 s the CFL is ~0.89).  Each dt

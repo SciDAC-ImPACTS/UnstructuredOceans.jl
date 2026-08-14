@@ -17,7 +17,7 @@
 #     check    : compare current single-layer run to the saved baseline
 #   (no arg) runs everything except the before/after diff.
 
-using MOKA
+using UnstructuredOceans
 using NCDatasets
 using Printf
 using Statistics
@@ -37,9 +37,9 @@ function bg_config(mesh_dir; nsteps=50, dt=1.0, wind=true)
     # Build a self-contained config pointing at (possibly synthesized) mesh.
     initial = joinpath(mesh_dir, "initial_state.nc")
 
-    cfg = MOKA.GlobalConfig()
+    cfg = UnstructuredOceans.GlobalConfig()
     nl = cfg.namelist
-    MOKA.config_add(nl, "time_management", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_management", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_do_restart" => false,
         "config_restart_timestamp_name" => "Restart_timestamp",
         "config_start_time" => DateTime(1,1,1,0,0,0),
@@ -48,25 +48,25 @@ function bg_config(mesh_dir; nsteps=50, dt=1.0, wind=true)
         "config_calendar_type" => "noleap",
         "config_output_reference_time" => DateTime(1,1,1,0,0,0),
     )))
-    MOKA.config_add(nl, "time_integration", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "time_integration", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_dt" => Second(round(Int, dt)),
         "config_time_integrator" => "RungeKutta4",
         "config_number_of_time_levels" => 2,
     )))
-    MOKA.config_add(nl, "forcing", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "forcing", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_bulk_wind_stress" => wind,
     )))
-    MOKA.config_add(nl, "hmix_del2", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(nl, "hmix_del2", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "config_use_mom_del2" => true,
         "config_mom_del2" => 400.0,
     )))
     st = cfg.streams
     for name in ("mesh", "input", "forcing")
-        MOKA.config_add(st, name, MOKA.yaml_config(Dict{Any,Any}(
+        UnstructuredOceans.config_add(st, name, UnstructuredOceans.yaml_config(Dict{Any,Any}(
             "filename_template" => initial,
         )))
     end
-    MOKA.config_add(st, "output", MOKA.yaml_config(Dict{Any,Any}(
+    UnstructuredOceans.config_add(st, "output", UnstructuredOceans.yaml_config(Dict{Any,Any}(
         "filename_template" => tempname() * ".nc",
         "reference_time" => DateTime(1,1,1,0,0,0),
         "output_interval" => Second(round(Int, nsteps*dt)),
@@ -76,12 +76,12 @@ end
 
 function build_state(mesh_dir; nsteps=50, dt=1.0, wind=true, backend=KA.CPU())
     cfg    = bg_config(mesh_dir; nsteps=nsteps, dt=dt, wind=wind)
-    Mesh   = MOKA.ocn_setup_mesh(cfg; backend=backend)
-    Clock  = MOKA.ocn_setup_clock(cfg)
-    Setup  = MOKA.ModelSetup(cfg, Mesh, Clock)
-    Prog   = MOKA.PrognosticVars(cfg, Mesh; backend=backend)
-    Diag   = MOKA.DiagnosticVars(Mesh; backend=backend)
-    Tend   = MOKA.TendencyVars(Mesh; backend=backend)
+    Mesh   = UnstructuredOceans.ocn_setup_mesh(cfg; backend=backend)
+    Clock  = UnstructuredOceans.ocn_setup_clock(cfg)
+    Setup  = UnstructuredOceans.ModelSetup(cfg, Mesh, Clock)
+    Prog   = UnstructuredOceans.PrognosticVars(cfg, Mesh; backend=backend)
+    Diag   = UnstructuredOceans.DiagnosticVars(Mesh; backend=backend)
+    Tend   = UnstructuredOceans.TendencyVars(Mesh; backend=backend)
     return (; Setup, Mesh, Prog, Diag, Tend)
 end
 
@@ -93,7 +93,7 @@ function run_bg(mesh_dir; nsteps=50, dt=1.0, wind=true)
     dt_arr[1] = dt
 
     for _ in 1:nsteps
-        MOKA.ocn_timestep(dt_arr, s.Prog, s.Diag, s.Tend, s.Mesh, RungeKutta4)
+        UnstructuredOceans.ocn_timestep(dt_arr, s.Prog, s.Diag, s.Tend, s.Mesh, RungeKutta4)
     end
 
     return (ssh  = Array(s.Prog.ssh[end]),
@@ -166,7 +166,7 @@ end
 # but on CPU and self-contained. Loss = Σ ssh² at the final step.
 # ----------------------------------------------------------------------------
 function ad_forward_check(mesh_dir; nsteps=10, dt=1.0)
-    @assert Base.get_extension(MOKA, :MOKAEnzymeExt) !== nothing "MOKAEnzymeExt not loaded"
+    @assert Base.get_extension(UnstructuredOceans, :UnstructuredOceansEnzymeExt) !== nothing "UnstructuredOceansEnzymeExt not loaded"
 
     backend = KA.CPU()
     dt_arr = KA.zeros(backend, Float64, 1); dt_arr[1] = dt
@@ -191,7 +191,7 @@ function ad_forward_check(mesh_dir; nsteps=10, dt=1.0)
     # carry a shadow or Enzyme forces its tangent to zero. Mirrors the GPU driver
     # in examples/.../enzyme_forward_test.jl (Duplicated Prog).
     function loss!(viscDel2_arr, Prog, Diag, Tend, Mesh, dt_arr, nsteps)
-        MOKA.ocn_run_loop_fwd!(viscDel2_arr, dt_arr, Prog, Diag, Tend, Mesh,
+        UnstructuredOceans.ocn_run_loop_fwd!(viscDel2_arr, dt_arr, Prog, Diag, Tend, Mesh,
                                RungeKutta4, nsteps)
         return sum(abs2, Prog.normalVelocity[end])
     end
@@ -219,7 +219,7 @@ function ad_forward_check(mesh_dir; nsteps=10, dt=1.0)
         vv = KA.zeros(backend, Float64, 1); vv[1] = visc
         st = build_state(mesh_dir; nsteps=nsteps, dt=dt, wind=true, backend=backend)
         seed_velocity!(st)
-        MOKA.ocn_run_loop_fwd!(vv, dt_arr, st.Prog, st.Diag, st.Tend, st.Mesh,
+        UnstructuredOceans.ocn_run_loop_fwd!(vv, dt_arr, st.Prog, st.Diag, st.Tend, st.Mesh,
                                RungeKutta4, nsteps)
         sum(abs2, st.Prog.normalVelocity[end])
     end

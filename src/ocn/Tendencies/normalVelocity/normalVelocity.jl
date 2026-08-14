@@ -4,7 +4,7 @@ export compute_normal_velocity_tendency!
 
 using UnPack
 using KernelAbstractions
-using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!,
+using UnstructuredOceans: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!,
             DEFAULT_NTHREADS
 
 # include tendency methods

@@ -122,7 +122,7 @@ function barotropic_streamfunction(mesh_ds::NCDataset,
     return psi
 end
 
-# %% Read MOKA output and compare
+# %% Read UnstructuredOceans output and compare
 function read_and_compare(out_fp::String, mesh_fp::String; frame::Int=0)
     mesh_ds = NCDataset(mesh_fp)
     num_ds  = NCDataset(out_fp)

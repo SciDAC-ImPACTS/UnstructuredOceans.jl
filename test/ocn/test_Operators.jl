@@ -1,5 +1,5 @@
 using Test
-using MOKA
+using UnstructuredOceans
 using UnPack
 using LinearAlgebra
 
@@ -7,7 +7,10 @@ import Adapt
 import Downloads
 import KernelAbstractions as KA
 
-mesh_fn = DownloadMesh(PlanarTest)
+mesh_url = "https://gist.github.com/mwarusz/f8caf260398dbe140d2102ec46a41268/raw/e3c29afbadc835797604369114321d93fd69886d/PlanarPeriodic48x48.nc"
+mesh_fn  = "UnstructuredOceansMesh.nc"
+
+Downloads.download(mesh_url, mesh_fn)
 
 backend = KA.CPU();
 
@@ -121,7 +124,7 @@ curlError = ErrorMeasures(curlNum, curlAnn, HorzMesh, Vertex)
     # thickness-flux diagnostic). Interior (non-boundary) edges must equal the
     # mean of their two neighbour cells, on every level.
     edgeVal = KA.zeros(backend, Float64, (nVertLevels, nEdges))
-    MOKA.interpolateCell2Edge!(edgeVal, Scalar, MPASMesh)
+    UnstructuredOceans.interpolateCell2Edge!(edgeVal, Scalar, MPASMesh)
     ev = Array(edgeVal)
     @test all(ev[k, :] == ev[1, :] for k in 2:nVertLevels)
 
@@ -150,9 +153,9 @@ end
     ssh0 = Array(h(setup, PlanarTest))[1, :]                 # varying ssh -> nonzero PGF
     vel0 = Array(𝐅ₑ(setup, PlanarTest))                     # varying velocity -> nonzero mixing/coriolis
     lth0 = ones(Float64, nVertLevels, nCells)
-    Prog = MOKA.PrognosticVars(ssh0, vel0, lth0, 2)
-    Diag = MOKA.DiagnosticVars(MPASMesh; backend=backend)
-    Tend = MOKA.TendencyVars(MPASMesh; backend=backend)
+    Prog = UnstructuredOceans.PrognosticVars(ssh0, vel0, lth0, 2)
+    Diag = UnstructuredOceans.DiagnosticVars(MPASMesh; backend=backend)
+    Tend = UnstructuredOceans.TendencyVars(MPASMesh; backend=backend)
 
     # Shrink the edge active levels to 1 (surface only) on a fresh mesh copy.
     VertMesh1 = VerticalMesh(HorzMesh; nVertLevels=nVertLevels, backend=backend)
@@ -160,8 +163,8 @@ end
     fill!(VertMesh1.maxLevelEdge.Bot, Int32(1))
     Mesh1 = Mesh(HorzMesh, VertMesh1)
 
-    MOKA.diagnostic_compute!(Mesh1, Diag, Prog)
-    MOKA.compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh1)
+    UnstructuredOceans.diagnostic_compute!(Mesh1, Diag, Prog)
+    UnstructuredOceans.compute_normal_velocity_tendency!(Tend, Prog, Diag, Mesh1)
 
     tnv = Array(Tend.tendNormalVelocity)
     # Levels 2:end were never visited by the k-loops (bounded at 1), so they must
@@ -177,9 +180,9 @@ end
 # Check the KE/thickness-vertex/PV kernels against exactly-representable inputs on
 # the periodic mesh (which carries kiteAreasOnVertex and fVertex), at every level.
 @testset "Vector-invariant reconstructions" begin
-    NV = MOKA.NormalVelocity
+    NV = UnstructuredOceans.NormalVelocity
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
-    nthreads = MOKA.DEFAULT_NTHREADS
+    nthreads = UnstructuredOceans.DEFAULT_NTHREADS
 
     # layer_thickness_vertex! of a constant thickness recovers the constant
     # (kite areas sum to the triangle area) at interior vertices, every level.

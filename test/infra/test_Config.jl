@@ -1,6 +1,6 @@
 using Test
 using Dates
-using MOKA: config_read, config_get, GlobalConfig, yaml_config,
+using UnstructuredOceans: config_read, config_get, GlobalConfig, yaml_config,
             config_set, config_add
 
 ref_hmix_String = "Restart_timestamp"

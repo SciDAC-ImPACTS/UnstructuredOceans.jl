@@ -25,7 +25,7 @@
 # linear scaling in N.
 #
 # Run with:  julia examples/plot_resolution_scaling_benchmark.jl
-# Needs only CairoMakie + DelimitedFiles (not MOKA) — run it in an environment
+# Needs only CairoMakie + DelimitedFiles (not UnstructuredOceans) — run it in an environment
 # that has CairoMakie (e.g. the global env; add with Pkg.add("CairoMakie")).
 
 using CairoMakie

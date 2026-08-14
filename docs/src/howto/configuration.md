@@ -1,8 +1,8 @@
 # Configure a simulation
 
-A MOKA run is fully specified by one YAML configuration file. The format follows
+A UnstructuredOceans run is fully specified by one YAML configuration file. The format follows
 the OMEGA / MPAS-Ocean convention: a top-level `omega:` mapping that the parser
-(`MOKA.config_read`, in `src/infra/Config.jl`) splits into
+(`UnstructuredOceans.config_read`, in `src/infra/Config.jl`) splits into
 a **namelist** (grouped scalar options) and **streams** (I/O definitions).
 
 Below is a complete config for the 10 km barotropic gyre

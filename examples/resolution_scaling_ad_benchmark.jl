@@ -1,6 +1,6 @@
 # Resolution-scaling benchmark — checkpointed reverse-mode AD
 # ==========================================================
-# Measures how MOKA's checkpointed reverse-mode AD driver
+# Measures how UnstructuredOceans's checkpointed reverse-mode AD driver
 # (`ocn_run_loop_checkpointed!`, Revolve) scales with mesh resolution (problem
 # size) on the available GPU(s) — NVIDIA (CUDA) and/or AMD (ROCm), whichever are
 # installed and functional. The runtime comparison is GPU-vs-GPU, so the CPU is
@@ -57,8 +57,8 @@ using Dates
 import KernelAbstractions as KA
 using BenchmarkTools
 using Enzyme
-using Checkpointing   # with Enzyme, loads MOKACheckpointingExt (ocn_run_loop_checkpointed!)
-using MOKA
+using Checkpointing   # with Enzyme, loads UnstructuredOceansCheckpointingExt (ocn_run_loop_checkpointed!)
+using UnstructuredOceans
 using GPUArraysCore: @allowscalar
 using DelimitedFiles
 using Printf

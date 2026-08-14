@@ -27,7 +27,7 @@
 #   - resolution_scaling_ad_primal_ratio.png  (ratio vs cell count, one line per backend)
 #
 # Run with:  julia examples/plot_ad_primal_ratio.jl
-# Needs only CairoMakie + DelimitedFiles (not MOKA) — run it in an environment that has
+# Needs only CairoMakie + DelimitedFiles (not UnstructuredOceans) — run it in an environment that has
 # CairoMakie (e.g. the global env; add with Pkg.add("CairoMakie")).
 #
 # Environment overrides (all optional):

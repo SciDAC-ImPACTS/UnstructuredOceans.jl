@@ -1,6 +1,6 @@
 # Resolution-scaling benchmark — forward model
 # ============================================
-# Measures how MOKA's forward-model runtime scales with mesh resolution (problem
+# Measures how UnstructuredOceans's forward-model runtime scales with mesh resolution (problem
 # size) on the available GPU(s) — NVIDIA (CUDA) and/or AMD (ROCm), whichever are
 # installed and functional. The runtime comparison is GPU-vs-GPU, so the CPU is
 # excluded by default (still runnable on request via RES_BENCH_BACKENDS=CPU). The
@@ -56,7 +56,7 @@
 using Dates
 import KernelAbstractions as KA
 using BenchmarkTools
-using MOKA
+using UnstructuredOceans
 using GPUArraysCore: @allowscalar
 using DelimitedFiles
 using Printf

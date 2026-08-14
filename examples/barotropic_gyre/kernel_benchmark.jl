@@ -60,7 +60,7 @@
 using Dates
 import KernelAbstractions as KA
 using BenchmarkTools
-using MOKA
+using UnstructuredOceans
 using GPUArraysCore: @allowscalar
 using DelimitedFiles
 using Printf
@@ -154,8 +154,8 @@ _dt_seconds(Setup) = convert(Float64, Dates.value(Second(Setup.timeManager.timeS
 # extent the kernel loops over (nEdges/nCells/nVertices) so per-element throughput can
 # be derived. `apply(st)` launches the kernel(s) but does NOT synchronize — the timed
 # wrapper does that once, after REPEATS launches.
-const nV = MOKA.NormalVelocity
-const lT = MOKA.LayerThickness
+const nV = UnstructuredOceans.NormalVelocity
+const lT = UnstructuredOceans.LayerThickness
 
 struct Kernel
     group::String
@@ -166,10 +166,10 @@ end
 
 const KERNELS = Kernel[
     # diagnostics
-    Kernel("diagnostics", "thicknessFlux",      :nEdges,    st -> MOKA.calculate_thickness_flux!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "velocityDivCell",    :nCells,    st -> MOKA.calculate_velocity_div_cell!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "relativeVorticity",  :nVertices, st -> MOKA.calculate_relative_vorticity!(st.Diag, st.Prog, st.Mesh)),
-    Kernel("diagnostics", "layerThicknessEdge", :nEdges,    st -> MOKA.calculate_layer_thickness_edge!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "thicknessFlux",      :nEdges,    st -> UnstructuredOceans.calculate_thickness_flux!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "velocityDivCell",    :nCells,    st -> UnstructuredOceans.calculate_velocity_div_cell!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "relativeVorticity",  :nVertices, st -> UnstructuredOceans.calculate_relative_vorticity!(st.Diag, st.Prog, st.Mesh)),
+    Kernel("diagnostics", "layerThicknessEdge", :nEdges,    st -> UnstructuredOceans.calculate_layer_thickness_edge!(st.Diag, st.Prog, st.Mesh)),
     # normalVelocity tendency terms
     Kernel("normalVelTend", "pressureGradient",   :nEdges, st -> nV.pressure_gradient_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.sshGradient)),
     Kernel("normalVelTend", "advectionCoriolis",  :nEdges, st -> nV.horizontal_advection_and_coriolis_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.linearCoriolis)),
@@ -178,11 +178,11 @@ const KERNELS = Kernel[
     # layerThickness tendency
     Kernel("layerThkTend", "thicknessFluxDiv",    :nCells, st -> lT.horizontal_advection_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
     # time integration
-    Kernel("integration", "advanceTimeLevels",    :mixed,  st -> MOKA.advance_time_levels!(st.Prog)),
+    Kernel("integration", "advanceTimeLevels",    :mixed,  st -> UnstructuredOceans.advance_time_levels!(st.Prog)),
     # composite drivers (for cross-checking against the sum of their parts)
-    Kernel("composite", "diagnostic_compute!",           :mixed, st -> MOKA.diagnostic_compute!(st.Mesh, st.Diag, st.Prog)),
-    Kernel("composite", "compute_normal_velocity_tendency!", :nEdges, st -> MOKA.compute_normal_velocity_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
-    Kernel("composite", "compute_layer_thickness_tendency!", :nCells, st -> MOKA.compute_layer_thickness_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
+    Kernel("composite", "diagnostic_compute!",           :mixed, st -> UnstructuredOceans.diagnostic_compute!(st.Mesh, st.Diag, st.Prog)),
+    Kernel("composite", "compute_normal_velocity_tendency!", :nEdges, st -> UnstructuredOceans.compute_normal_velocity_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
+    Kernel("composite", "compute_layer_thickness_tendency!", :nCells, st -> UnstructuredOceans.compute_layer_thickness_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
     Kernel("composite", "ocn_timestep",                   :mixed, st -> ocn_timestep(st.timestep, st.Prog, st.Diag, st.Tend, st.Mesh, st.integrator)),
 ]
 
@@ -205,7 +205,7 @@ function setup_state(dir, config, backend)
     timestep = KA.zeros(backend, Float64, (1,))
     @allowscalar timestep[1] = _dt_seconds(Setup)
     integrator = parse_integrator(
-        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+        UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                        "config_time_integrator"))
     edges    = Mesh.HorzMesh.Edges
     cells    = Mesh.HorzMesh.PrimaryCells
@@ -220,7 +220,7 @@ end
 # diagnostics so every tendency kernel sees identical, valid inputs each sample.
 function reset_state!(st)
     restore_prog!(st.Prog, st.snap)
-    MOKA.diagnostic_compute!(st.Mesh, st.Diag, st.Prog)
+    UnstructuredOceans.diagnostic_compute!(st.Mesh, st.Diag, st.Prog)
     KA.synchronize(st.backend)
     return nothing
 end

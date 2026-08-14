@@ -1,4 +1,4 @@
-module MOKA
+module UnstructuredOceans
 
     export ocn_run_loop, ocn_run_loop_fwd!, ocn_run_loop_checkpointed!, ocn_loss, OceanModel, ocn_step!, ocn_init, ocn_init_shadows, ocn_init_alarms, is_ringing, advance!, ocn_timestep, change_time_step!, reset!
     export RungeKutta4, ForwardEuler, parse_integrator

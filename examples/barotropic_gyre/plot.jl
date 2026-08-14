@@ -3,7 +3,7 @@ using NCDatasets
 using CairoMakie
 using Printf
 
-# %% Read fields from a MOKA output / initial-state pair
+# %% Read fields from a UnstructuredOceans output / initial-state pair
 """
     read_fields(out_fp, mesh_fp) -> Dict
 

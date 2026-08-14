@@ -1,17 +1,17 @@
 ```@meta
-CurrentModule = MOKA
+CurrentModule = UnstructuredOceans
 ```
 
 # Choose a compute backend
 
-MOKA runs the same kernels on the CPU and on NVIDIA, AMD, and Intel GPUs. The
+UnstructuredOceans runs the same kernels on the CPU and on NVIDIA, AMD, and Intel GPUs. The
 backend is selected at runtime and passed into [`ocn_init`](@ref) (and the array
 constructors) as a KernelAbstractions backend. This guide shows how to pick one.
 
 ## CPU (no extra packages)
 
 ```julia
-using MOKA
+using UnstructuredOceans
 import KernelAbstractions as KA
 
 backend = KA.CPU()
@@ -21,12 +21,12 @@ Setup, Diag, Tend, Prog = ocn_init(config; backend = backend)
 ## GPU
 
 GPU support is provided by package extensions that load automatically the moment
-the vendor package is in scope alongside `MOKA`. Add and load the one for your
+the vendor package is in scope alongside `UnstructuredOceans`. Add and load the one for your
 hardware, then construct a [`GPU`](@ref) architecture and take its
 [`device`](@ref):
 
 ```julia
-using MOKA
+using UnstructuredOceans
 using CUDA                      # or: using AMDGPU / using oneAPI
 
 arch    = GPU()                 # vendor extension supplies the default device
@@ -37,9 +37,9 @@ Setup, Diag, Tend, Prog = ocn_init(config; backend = backend)
 
 | Vendor | Package  | Extension        |
 |:-------|:---------|:-----------------|
-| NVIDIA | `CUDA`   | `MOKACUDAExt`    |
-| AMD    | `AMDGPU` | `MOKAAMDGPUExt`  |
-| Intel  | `oneAPI` | `MOKAoneAPIExt`  |
+| NVIDIA | `CUDA`   | `UnstructuredOceansCUDAExt`    |
+| AMD    | `AMDGPU` | `UnstructuredOceansAMDGPUExt`  |
+| Intel  | `oneAPI` | `UnstructuredOceansoneAPIExt`  |
 
 The command-line driver exposes the NVIDIA path directly:
 

@@ -1,10 +1,10 @@
 ```@meta
-CurrentModule = MOKA
+CurrentModule = UnstructuredOceans
 ```
 
 # Getting started
 
-This tutorial walks through running your first MOKA simulation: a wind-driven
+This tutorial walks through running your first UnstructuredOceans simulation: a wind-driven
 **barotropic gyre**, one of the two verification cases shipped with the package.
 By the end you will have integrated the shallow-water equations forward in time
 and written the result to a NetCDF file.
@@ -19,8 +19,8 @@ The example inputs live in the repository, so clone it and instantiate the
 environment:
 
 ```bash
-git clone https://https://github.com/SciDAC-ImPACTS/Moka.jl MOKA.jl
-cd MOKA.jl
+git clone https://https://github.com/SciDAC-ImPACTS/Moka.jl UnstructuredOceans.jl
+cd UnstructuredOceans.jl
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
@@ -42,10 +42,10 @@ configured stop time, and writes `examples/barotropic_gyre/10km/output.nc`.
 ## 3. Run from Julia (the API path)
 
 The driver is a thin wrapper over the public API. Running the same simulation
-yourself shows the sequence you would use to embed MOKA in your own code:
+yourself shows the sequence you would use to embed UnstructuredOceans in your own code:
 
 ```julia
-using MOKA
+using UnstructuredOceans
 using Dates
 import KernelAbstractions as KA
 using GPUArraysCore: @allowscalar
@@ -68,7 +68,7 @@ timestep = KA.zeros(backend, Float64, (1,))
 @allowscalar timestep[1] = Float64(Dates.value(Second(Setup.timeManager.timeStep)))
 
 # 4. Select the time integrator from the config string.
-ti = MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+ti = UnstructuredOceans.config_get(UnstructuredOceans.config_get(Setup.config.namelist, "time_integration"),
                     "config_time_integrator")
 integrator = parse_integrator(ti)     # RungeKutta4 or ForwardEuler
 

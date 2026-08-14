@@ -8,7 +8,7 @@
 #SBATCH -t 02:00:00
 
 # replace this path with the path to the git repo
-gitdir="/disk/aseth/MOKA.jl"
+gitdir="/disk/aseth/UnstructuredOceans.jl"
 driver="src/driver/mpas_ocean.jl"
 execut="${gitdir}/${driver}"
 
@@ -16,7 +16,7 @@ for dir in 200km 100km 50km 25km; do
     python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
 
     cd $dir
-    cp ../Moka.yaml ./config.yml
+    cp ../UnstructuredOceans.yaml ./config.yml
 
     # Scale dt linearly with cell width at constant CFL ≈ 0.24 (c=√(gH)≈99 m/s).
     # RK4's temporal error is 4th order only asymptotically; at larger CFL it is

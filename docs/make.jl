@@ -1,12 +1,12 @@
 using Documenter
-using MOKA
+using UnstructuredOceans
 
-DocMeta.setdocmeta!(MOKA, :DocTestSetup, :(using MOKA); recursive=true)
+DocMeta.setdocmeta!(UnstructuredOceans, :DocTestSetup, :(using UnstructuredOceans); recursive=true)
 
 makedocs(;
-    modules  = [MOKA],
+    modules  = [UnstructuredOceans],
     authors  = "SciDAC ImPACTS Team",
-    sitename = "MOKA.jl",
+    sitename = "UnstructuredOceans.jl",
     format   = Documenter.HTML(;
         prettyurls = get(ENV, "CI", nothing) == "true",
         edit_link  = "main",

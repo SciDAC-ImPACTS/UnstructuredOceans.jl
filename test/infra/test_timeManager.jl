@@ -1,7 +1,7 @@
 using Test
 using Dates
 using UnPack
-using MOKA: Clock, change_time_step!, attach_alarm!, advance!,
+using UnstructuredOceans: Clock, change_time_step!, attach_alarm!, advance!,
             OneTimeAlarm, PeriodicAlarm, is_ringing, update_status!,
             rename!, stop!, reset!, mpas_create_clock, Alarm, set_current_time! 
 # alernatively should make a module for timeMagament / infra 

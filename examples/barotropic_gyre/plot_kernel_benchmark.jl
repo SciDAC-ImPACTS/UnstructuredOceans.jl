@@ -18,7 +18,7 @@
 # every text element up or down uniformly (default 1.0).
 #
 # Run with:  julia examples/barotropic_gyre/plot_kernel_benchmark.jl
-# Needs only CairoMakie + DelimitedFiles (not MOKA) — run it in an environment that has
+# Needs only CairoMakie + DelimitedFiles (not UnstructuredOceans) — run it in an environment that has
 # CairoMakie (e.g. the global env; add with Pkg.add("CairoMakie")).
 #
 # Environment overrides (all optional):

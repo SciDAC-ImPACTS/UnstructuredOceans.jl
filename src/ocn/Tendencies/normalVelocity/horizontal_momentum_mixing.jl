@@ -41,7 +41,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             ndrange=nEdges)
 
     # No host KA.synchronize: redundant on a single CUDA stream, and its
-    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
+    # nonblocking sync worker segfaults Enzyme reverse mode (see UnstructuredOceansEnzymeExt).
 
     @pack! Tend = tendNormalVelocity
 end

@@ -1,4 +1,4 @@
-using MOKA.MPASMesh
+using UnstructuredOceans.MPASMesh
 
 """
     ocn_init(Config_filepath; backend=KernelAbstractions.CPU())
@@ -134,7 +134,7 @@ function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
         forcingStream = config_get(Config.streams, "forcing")
         forcing_fp = config_get(forcingStream, "filename_template", mesh_fp)
     end
-    forcing = MOKA.MPASMesh.build_forcing(h_mesh, forcing_fp;
+    forcing = UnstructuredOceans.MPASMesh.build_forcing(h_mesh, forcing_fp;
                                           rho=density, use_wind_stress=use_wind_stress,
                                           backend=backend)
 
