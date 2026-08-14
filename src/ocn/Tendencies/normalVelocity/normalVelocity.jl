@@ -4,52 +4,35 @@ export computeNormalVelocityTendency!
 
 using UnPack
 using KernelAbstractions
-using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, GlobalConfig, ZeroOutVector!
+using MOKA: TendencyVars, PrognosticVars, DiagnosticVars, Mesh, ZeroOutVector!
 
-#const KA = KernelAbstractions
-
-# include tendecy methods
+# include tendency methods
 include("pressure_gradient.jl")
 include("horizontal_advection_and_coriolis.jl")
+include("horizontal_momentum_mixing.jl")
+include("wind_forcing.jl")
 
-### TO DO: 
-#
-#  [ ] Parser functions that will iterate over config files to dispatch 
-#      the proper tendency type. 
-####
-
-function computeNormalVelocityTendency!(Tend::TendencyVars, 
+function computeNormalVelocityTendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
-                                        Diag::DiagnosticVars, 
-                                        Mesh::Mesh, 
-                                        Config::GlobalConfig;
-                                        backend = CUDABackend())
-    
+                                        Diag::DiagnosticVars,
+                                        Mesh::Mesh)
+    backend = KernelAbstractions.get_backend(Tend.tendNormalVelocity)
     nthreads = 50
     kernel! = ZeroOutVector!(backend, nthreads)
     kernel!(Tend.tendNormalVelocity, Mesh.HorzMesh.Edges.nEdges, ndrange=Mesh.HorzMesh.Edges.nEdges)
-    #=
-    # hard code the pressure gradient as SSH Gradient for now, in the future 
-    # we will want some functionality to parse config (e.g.):
-    #
-    #       pGradType = parsing_function(Config)       
-    =#       
-    pGradType = sshGradient
 
-    # compute pressure gradient tendency on requested backend
     pressure_gradient_tendency!(
-        Tend, Prog, Diag, Mesh, pGradType; backend = backend
-       )
-    
-    
-    # hard coded type for now, see above about inquiring into the config struct
-    coriolisType = linearCoriolis
-    
-    # compute horizontal advection and corilois tendency on requested backend
+        Tend, Prog, Diag, Mesh, sshGradient)
+
     horizontal_advection_and_coriolis_tendency!(
-        Tend, Prog, Diag, Mesh, coriolisType; backend = backend
-       )
-    
+        Tend, Prog, Diag, Mesh, linearCoriolis)
+
+    horizontal_momentum_mixing_tendency!(
+        Tend, Prog, Diag, Mesh, Del2)
+
+    wind_forcing_tendency!(
+        Tend, Diag, Mesh)
+
 end
 
 end

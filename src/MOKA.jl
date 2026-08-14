@@ -1,26 +1,29 @@
 module MOKA
-    
+
     export ocn_run_loop, ocn_init, ocn_init_shadows, ocn_init_alarms, isRinging, advance!, ocn_timestep, changeTimeStep!, reset!
-    export mycopyto!
-    export RungeKutta4, ForwardEuler 
-    export write_netcdf
-    
-    # MPASMesh 
+    export RungeKutta4, ForwardEuler, parse_integrator
+    export write_netcdf, io_initialize, io_writeTimestep, io_finalize
+    export Clock, OneTimeAlarm, PeriodicAlarm
+
+    # MPASMesh
     export VerticalMesh, ReadHorzMesh, Mesh, HorzMesh, VertMesh,
            Cell, Edge, Vertex
-   
+
     # Operators
     export GradientOnEdge!,
-           DivergenceOnCell!, 
+           DivergenceOnCell!,
            CurlOnVertex!,
            ZeroOutVector!
 
-    export mycopyto!
-    
+    # Architectures
+    export CPU, GPU, AbstractArchitecture, AbstractSerialArchitecture,
+           device, architecture, array_type, on_architecture
 
-    using Dates, YAML, NCDatasets, UnPack, Statistics, Logging, KernelAbstractions
-    
-    # include infrastrcutre code 
+    using Dates, Printf, YAML, NCDatasets, UnPack, Statistics, Logging, KernelAbstractions
+
+    include("Architectures.jl")
+
+    # include infrastructure code
     # (Should all of this just be it's own module which is imported here?)
     include("infra/Config.jl")
     include("infra/TimeManager.jl")
@@ -31,8 +34,8 @@ module MOKA
     include("ocn/Operators.jl")
     include("ocn/PrognosticVars.jl")
     include("ocn/DiagnosticVars.jl")
-    
-    # This infrastrcutre code is lower down b/c it depends on Prog/Diag structures 
+
+    # This infrastructure code is lower down b/c it depends on Prog/Diag structures
     # for now, so those have to be defined before it can be included
     include("infra/OutPut.jl")
 
@@ -43,13 +46,11 @@ module MOKA
     include("forward/init.jl")
     include("forward/time_integration.jl")
     include("forward/run_loop.jl")
-    
-    include("Architectures.jl")
-    
+
     ###
     ### Needed so we can export names from sub-modules at the top level
     ###
-    using .MPASMesh    
+    using .MPASMesh
     using .normalVelocity
     using .layerThickness
 end

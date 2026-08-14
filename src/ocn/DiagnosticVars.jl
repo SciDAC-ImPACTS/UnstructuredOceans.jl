@@ -1,7 +1,7 @@
 import Adapt
 
-using CUDA
 using KernelAbstractions
+const KA = KernelAbstractions
 
 mutable struct DiagnosticVars{F <: AbstractFloat, FV2 <: AbstractArray{F,2}}
     
@@ -72,7 +72,7 @@ mutable struct DiagnosticVars{F <: AbstractFloat, FV2 <: AbstractArray{F,2}}
     end
 end 
  
-function DiagnosticVars(config::GlobalConfig, Mesh::Mesh; backend=KA.CPU())
+function DiagnosticVars(Mesh::Mesh; backend=KA.CPU())
 
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
@@ -107,13 +107,12 @@ end
 
 function diagnostic_compute!(Mesh::Mesh,
                              Diag::DiagnosticVars,
-                             Prog::PrognosticVars;
-                             backend = KA.CPU())
+                             Prog::PrognosticVars)
 
-    calculate_thicknessFlux!(Diag, Prog, Mesh; backend = backend)
-    calculate_velocityDivCell!(Diag, Prog, Mesh; backend = backend)
-    calculate_relativeVorticity!(Diag, Prog, Mesh; backend = backend)
-    calculate_layerThicknessEdge!(Diag, Prog, Mesh; backend = backend)
+    calculate_thicknessFlux!(Diag, Prog, Mesh)
+    calculate_velocityDivCell!(Diag, Prog, Mesh)
+    calculate_relativeVorticity!(Diag, Prog, Mesh)
+    calculate_layerThicknessEdge!(Diag, Prog, Mesh)
 end 
 
 #= Preformance Note:
@@ -125,39 +124,38 @@ end
 
 function calculate_layerThicknessEdge!(Diag::DiagnosticVars,
                                        Prog::PrognosticVars,
-                                       Mesh::Mesh;
-                                       backend = KA.CPU())
-    
+                                       Mesh::Mesh)
+
     #layerThickness = Prog.layerThickness[:,:,end]
-    @unpack layerThicknessEdge = Diag 
-    
-    interpolateCell2Edge!(layerThicknessEdge, 
+    @unpack layerThicknessEdge = Diag
+
+    interpolateCell2Edge!(layerThicknessEdge,
                           Prog.layerThickness[end],
-                          Mesh; backend = backend)
+                          Mesh)
 
     @pack! Diag = layerThicknessEdge
 end 
 
 function calculate_thicknessFlux!(Diag::DiagnosticVars,
                                   Prog::PrognosticVars,
-                                  Mesh::Mesh;
-                                  backend = CUDABackend())
+                                  Mesh::Mesh)
 
+    backend = KA.get_backend(Diag.thicknessFlux)
+    
     normalVelocity = Prog.normalVelocity[end]
-    @unpack thicknessFlux, layerThicknessEdge = Diag 
+    @unpack thicknessFlux, layerThicknessEdge = Diag
 
     nthreads = 100
     kernel!  = compute_thicknessFlux!(backend, nthreads)
 
     kernel!(thicknessFlux, Prog.normalVelocity[end], layerThicknessEdge, size(normalVelocity)[2], ndrange=size(normalVelocity)[2])
-    #kernel!(thicknessFlux, Prog.normalVelocity, layerThicknessEdge, ndrange=(size(Prog.normalVelocity)[1],size(Prog.normalVelocity)[2]))
 
     @pack! Diag = thicknessFlux
 end
 
 @kernel function compute_thicknessFlux!(thicknessFlux,
-                                        @Const(normalVelocity),
-                                        @Const(layerThicknessEdge),
+                                        normalVelocity,
+                                        layerThicknessEdge,
                                         arrayLength)
 
     j = @index(Global, Linear)
@@ -165,43 +163,28 @@ end
         @inbounds thicknessFlux[1,j] = normalVelocity[1,j] * layerThicknessEdge[1,j]
     end
 
-    #k, j = @index(Global, NTuple)
-    #if j < arrayLength + 1
-    #    @inbounds thicknessFlux[k,j] = normalVelocity[k,j,end] * layerThicknessEdge[k,j]
-    #end
     @synchronize()
 end
 
-function calculate_velocityDivCell!(Diag::DiagnosticVars, 
-                                    Prog::PrognosticVars, 
-                                    Mesh::Mesh;
-                                    backend = KA.CPU()) 
-    
+function calculate_velocityDivCell!(Diag::DiagnosticVars,
+                                    Prog::PrognosticVars,
+                                    Mesh::Mesh)
+
     normalVelocity = Prog.normalVelocity[end]
-
-    # I think the issue is that this doesn't create a new array while the old version does... we need a
-    # new array for temporary data
-
-    # layerThicknessEdge is used here to temporarily store intermdeiate results. It will be reset when it is acually
-    # used as a diagnostic variable
     @unpack velocityDivCell, layerThicknessEdge = Diag
 
-
-    DivergenceOnCell!(velocityDivCell, normalVelocity, layerThicknessEdge, Mesh; backend=backend)
+    DivergenceOnCell!(velocityDivCell, normalVelocity, layerThicknessEdge, Mesh)
 
     @pack! Diag = velocityDivCell
 end
 
-function calculate_relativeVorticity!(Diag::DiagnosticVars, 
-                                      Prog::PrognosticVars, 
-                                      Mesh::Mesh;
-                                      backend = KA.CPU()) 
-
-    #normalVelocity = Prog.normalVelocity[:,:,end]
+function calculate_relativeVorticity!(Diag::DiagnosticVars,
+                                      Prog::PrognosticVars,
+                                      Mesh::Mesh)
 
     @unpack relativeVorticity = Diag
 
-    CurlOnVertex!(relativeVorticity, Prog.normalVelocity[end], Mesh; backend=backend)
+    CurlOnVertex!(relativeVorticity, Prog.normalVelocity[end], Mesh)
 
     @pack! Diag = relativeVorticity
 end

@@ -22,9 +22,8 @@ function ocn_init(Config_filepath; backend=KA.CPU())
     # Diagnostic and Tendecies probabl don't need to be initialized here 
     # instead should happen within the `ocn_run` method, prior to entering 
     # the first time integration loop to ensure values are initialized 
-    Diag = DiagnosticVars(Config, Mesh; backend=backend)
-
-    Tend = TendencyVars(Config, Mesh; backend=backend)
+    Diag = DiagnosticVars(Mesh; backend=backend)
+    Tend = TendencyVars(Mesh; backend=backend)
 
     return Setup, Diag, Tend, Prog
 end 
@@ -41,14 +40,20 @@ end
 
 
 function ocn_setup_mesh(Config::GlobalConfig; backend=KA.CPU())
-    # get mesh section of the streams file
     meshConfig = ConfigGet(Config.streams, "mesh")
-    # get mesh filepath from streams section
     mesh_fp = ConfigGet(meshConfig, "filename_template")
-    # read the inut mesh from the configuartion file 
-    # NOTE: This might be a restart file based on config options 
-    
-    h_mesh = ReadHorzMesh(mesh_fp; backend=backend)
+
+    # read del2 momentum viscosity; default 0 (no mixing) if section absent
+    momentumDel2 = 0.0
+    if haskey(Config.namelist.dict, "hmix_del2")
+        hmixConfig = ConfigGet(Config.namelist, "hmix_del2")
+        if haskey(hmixConfig.dict, "config_mom_del2")
+            momentumDel2 = Float64(ConfigGet(hmixConfig, "config_mom_del2"))
+        end
+    end
+
+    h_mesh = ReadHorzMesh(mesh_fp; backend=backend,
+                          momentumDel2=momentumDel2, rho=1000.0)
     v_mesh = VerticalMesh(mesh_fp, h_mesh; backend=backend)
 
     return Mesh(h_mesh, v_mesh)
@@ -69,17 +74,6 @@ function ocn_setup_clock(Config::GlobalConfig)
     
     output_reference_time = ConfigGet(outputConfig, "reference_time")
     output_interval = ConfigGet(outputConfig, "output_interval")
-
-    ## I think I need some example of this, becuase not immediately obvious to me how to 
-    ## deal with this. Or really, what this actually would look like. 
-    #if restart_timestamp_name == "file"
-    #
-    #else 
-    #  
-    #end 
-    
-    # both config_run_duration and config_stop_time specified. Ensure that values are consitent
-
 
     if run_duration != "none" 
         clock = mpas_create_clock(dt, start_time; runDuration=run_duration)
@@ -109,17 +103,8 @@ end
 
 # Helper function for setting the clock, simulationAlarm, and outputAlarm
 function ocn_init_alarms(Setup)
-    mesh = Setup.mesh
-    
-    # this is hardcoded for now, but should really be set accordingly in the 
-    # yaml file
-    #dt = floor(3.0 * mean(mesh.dcEdge) / 1e3)
-    dcEdge = mesh.HorzMesh.Edges.dcEdge
-    dt = floor(2 * (mean(dcEdge) / 1e3) * mean(dcEdge) / 200e3) 
-    changeTimeStep!(Setup.timeManager, Second(dt))
-    
     clock = Setup.timeManager
-    
+
     simulationAlarm = clock.alarms["simulation_end"]
     outputAlarm = clock.alarms["outputAlarm"]
 

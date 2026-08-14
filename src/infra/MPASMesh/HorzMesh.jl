@@ -1,4 +1,3 @@
-using CUDA
 using UnPack
 using Accessors
 using NCDatasets
@@ -61,13 +60,13 @@ end
 ###
 
 # these are line segments
-@kwdef struct Edges{I, FV, IV, FM, IM} 
+@kwdef struct Edges{I, FV, IV, FM, IM}
     # I   --> (I)nt
-    # FT  --> (F)loat (V)ector 
-    # IT  --> (I)int  (V)ector 
-    # FM  --> (F)loat (M)atrix  
-    # IM  --> (I)int  (M)atrix  
-    
+    # FT  --> (F)loat (V)ector
+    # IT  --> (I)int  (V)ector
+    # FM  --> (F)loat (M)atrix
+    # IM  --> (I)int  (M)atrix
+
     # dimension info
     nEdges::I
 
@@ -75,9 +74,9 @@ end
     xᵉ::FV   # X coordinates of edge midpoints in cartesian space
     yᵉ::FV   # Y coordinates of edge midpoints in cartesian space
     zᵉ::FV   # Z coordinates of edge midpoints in cartesian space
-   
+
     # coriolis parameter
-    fᵉ::FV 
+    fᵉ::FV
 
     nEdgesOnEdge::IV # (n)umber of (E)dges (o) (E)dge
 
@@ -90,8 +89,17 @@ end
     weightsOnEdge::FM # (W)eights (o)n (E)dge; reconstruction weights associated w/ EoE
 
     dvEdge::FV
-    dcEdge::FV 
+    dcEdge::FV
     angleEdge::FV
+
+    # 1 if the edge touches a missing (0) cell (solid wall), else 0
+    boundaryEdge::IV
+
+    # edge-normal wind stress / rho projected onto edge normals [m^2 s^-2]
+    windForcingEdge::FV
+
+    # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive
+    momentumDel2::Float64 = 0.0
 end
 
 ###
@@ -244,12 +252,12 @@ function readDualMesh(ds)
               areaTriangle = areaTriangle)
 end 
 
-function readEdgeInfo(ds)
+function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
 
-    # coordinate data 
+    # coordinate data
     xᵉ = ds["xEdge"][:]
     yᵉ = ds["yEdge"][:]
     zᵉ = ds["zEdge"][:]
@@ -257,13 +265,11 @@ function readEdgeInfo(ds)
     if haskey(ds, "fEdge")
         fᵉ = ds["fEdge"][:]
     else
-        # initalize coriolis as zero b/c not included in the base mesh
         fᵉ = zeros(eltype(xᵉ), nEdges)
     end
 
     nEdgesOnEdge = ds["nEdgesOnEdge"][:]
 
-   
     # intra connectivity
     cellsOnEdge = ds["cellsOnEdge"][:,:]
     verticesOnEdge = ds["verticesOnEdge"][:,:]
@@ -274,9 +280,29 @@ function readEdgeInfo(ds)
 
     dvEdge = ds["dvEdge"][:]
     dcEdge = ds["dcEdge"][:]
-
     angleEdge = ds["angleEdge"][:]
-        
+
+    # boundary mask: 1 if either neighbour cell is missing (index 0)
+    boundaryEdge = Int32.(vec(any(cellsOnEdge .== 0; dims=1)))
+
+    # project wind stress onto edge normals; default to zero if fields absent
+    float_type = eltype(xᵉ)
+    if haskey(ds, "windStressZonal") && haskey(ds, "windStressMeridional")
+        τz_c = float_type.(ds["windStressZonal"][:,1])
+        τm_c = float_type.(ds["windStressMeridional"][:,1])
+        windForcingEdge = zeros(float_type, nEdges)
+        for iEdge in 1:nEdges
+            c1 = cellsOnEdge[1, iEdge]
+            c2 = cellsOnEdge[2, iEdge]
+            τz_e = (c1 == 0 ? τz_c[c2] : (c2 == 0 ? τz_c[c1] : 0.5*(τz_c[c1] + τz_c[c2])))
+            τm_e = (c1 == 0 ? τm_c[c2] : (c2 == 0 ? τm_c[c1] : 0.5*(τm_c[c1] + τm_c[c2])))
+            windForcingEdge[iEdge] = (τz_e * cos(angleEdge[iEdge]) +
+                                      τm_e * sin(angleEdge[iEdge])) / rho
+        end
+    else
+        windForcingEdge = zeros(float_type, nEdges)
+    end
+
     Edges(nEdges = nEdges,
           xᵉ = xᵉ, yᵉ = yᵉ, zᵉ = zᵉ, fᵉ = fᵉ,
           nEdgesOnEdge = nEdgesOnEdge,
@@ -285,8 +311,11 @@ function readEdgeInfo(ds)
           edgesOnEdge = edgesOnEdge,
           weightsOnEdge = weightsOnEdge,
           dvEdge = dvEdge,
-          dcEdge = dcEdge, 
-          angleEdge = angleEdge)
+          dcEdge = dcEdge,
+          angleEdge = angleEdge,
+          boundaryEdge = boundaryEdge,
+          windForcingEdge = windForcingEdge,
+          momentumDel2 = momentumDel2)
 end
 
 function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
@@ -316,28 +345,30 @@ function signIndexField!(dualMesh::DualCells, edges::Edges)
     @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh 
 
     for iVertex in 1:nVertices, i in 1:vertexDegree
-         
+
         @inbounds iEdge = edgesOnVertex[i, iVertex]
-        
+        iEdge == 0 && continue
+
         # vector points from cell 1 to cell 2
         if iVertex == verticesOnEdge[1, iEdge]
             @inbounds edgeSignOnVertex[i, iVertex] = -1
-        else 
+        else
             @inbounds edgeSignOnVertex[i, iVertex] = 1
-        end 
+        end
     end    
     
     # DualCell struct is immutable so need to use Accessor package,
     @reset dualMesh.edgeSignOnVertex = edgeSignOnVertex
 end 
 
-function ReadHorzMesh(meshPath::String; backend=KA.CPU())
-    
+function ReadHorzMesh(meshPath::String; backend=KA.CPU(),
+                      momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+
     ds = NCDataset(meshPath, "r", format=:netcdf4)
 
     PrimaryMesh = readPrimaryMesh(ds)
     DualMesh    = readDualMesh(ds)
-    edges       = readEdgeInfo(ds)
+    edges       = readEdgeInfo(ds; momentumDel2 = momentumDel2, rho = rho)
     
     # set the edge sign on cells (primary mesh)
     signIndexField!(PrimaryMesh, edges)
@@ -366,8 +397,11 @@ function Adapt.adapt_structure(to, edges::Edges)
                  edgesOnEdge = Adapt.adapt(to, edges.edgesOnEdge),
                  weightsOnEdge = Adapt.adapt(to, edges.weightsOnEdge),
                  dvEdge = Adapt.adapt(to, edges.dvEdge),
-                 dcEdge = Adapt.adapt(to, edges.dcEdge), 
-                 angleEdge = Adapt.adapt(to, edges.angleEdge))
+                 dcEdge = Adapt.adapt(to, edges.dcEdge),
+                 angleEdge = Adapt.adapt(to, edges.angleEdge),
+                 boundaryEdge = Adapt.adapt(to, edges.boundaryEdge),
+                 windForcingEdge = Adapt.adapt(to, edges.windForcingEdge),
+                 momentumDel2 = edges.momentumDel2)
 end
 
 function Adapt.adapt_structure(to, cells::PrimaryCells)

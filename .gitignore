@@ -11,3 +11,23 @@ InertiaGravityWaveMesh.tar.gz
 InertiaGravityWaveMesh/
 output.tar.gz
 sbatch_logs/
+
+# MacOS files
+.DS_Store
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# NetCDF output files
+*.nc
+
+# Custom
+_research/

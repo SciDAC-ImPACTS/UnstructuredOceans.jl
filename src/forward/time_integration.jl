@@ -1,13 +1,33 @@
-# define our parent abstract type 
-abstract type timeStepper end 
-# define the supported timeStepper types to dispatch on. 
-abstract type ForwardEuler <: timeStepper end 
+# define our parent abstract type
+abstract type timeStepper end
+# define the supported timeStepper types to dispatch on.
+abstract type ForwardEuler <: timeStepper end
 abstract type RungeKutta4  <: timeStepper end
 
-using CUDA: @allowscalar
+"""
+    parse_integrator(name) -> timeStepper type
+
+Map a `config_time_integrator` string to its timeStepper type, tolerating common
+spellings (e.g. "RK4" for RungeKutta4, "Forward-Euler" for ForwardEuler).
+"""
+function parse_integrator(name::AbstractString)
+    key = lowercase(replace(name, "-" => "", "_" => "", " " => ""))
+    if key in ("rungekutta4", "rk4")
+        return RungeKutta4
+    elseif key in ("forwardeuler", "euler", "fe")
+        return ForwardEuler
+    else
+        throw(ArgumentError(
+            "Unknown config_time_integrator \"$name\"; " *
+            "expected \"RungeKutta4\" (\"RK4\") or \"ForwardEuler\"."))
+    end
+end
+
+using GPUArraysCore: @allowscalar
 using KernelAbstractions
 
-function advanceTimeLevels!(Prog::PrognosticVars; backend=CUDABackend())
+function advance_time_levels!(Prog::PrognosticVars)
+    backend = KernelAbstractions.get_backend(first(Prog.ssh))
 
     nthreads = 100
 
@@ -39,7 +59,7 @@ function advanceTimeLevels!(Prog::PrognosticVars; backend=CUDABackend())
     end 
 end
 
-@kernel function advance_2d_array(fieldPrev, @Const(fieldNext), arrayLength)
+@kernel function advance_2d_array(fieldPrev, fieldNext, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         @inbounds fieldPrev[j] = fieldNext[j]
@@ -47,10 +67,7 @@ end
     @synchronize()
 end
 
-@kernel function advance_3d_array(fieldPrev, @Const(fieldNext), arrayLength)
-    #i, j = @index(Global, NTuple)
-    #@inbounds fieldPrev[i, j] = fieldNext[i, j]
-
+@kernel function advance_3d_array(fieldPrev, fieldNext, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         @inbounds fieldPrev[1, j] = fieldNext[1, j]
@@ -58,142 +75,105 @@ end
     @synchronize()
 end
 
-function ocn_timestep(Prog::PrognosticVars, 
+function ocn_timestep(dt,
+                      Prog::PrognosticVars,
                       Diag::DiagnosticVars,
-                      Tend::TendencyVars, 
-                      S::ModelSetup,
-                      ::Type{RungeKutta4}; 
-                      backend = KA.CPU())
-    
-    Mesh = S.mesh 
-    Clock = S.timeManager 
-    
-    # advance the timelevels within the state strcut 
-    advanceTimeLevels!(Prog; backend=backend)
+                      Tend::TendencyVars,
+                      Mesh::Mesh,
+                      ::Type{RungeKutta4})
+    backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
-    # convert the timestep to seconds 
-    dt = convert(Float64, Dates.value(Second(Clock.timeStep)))
-    
+    advance_time_levels!(Prog)
+
+    # RK4 coefficients: substep sizes and accumulation weights
     a = [dt/2., dt/2., dt]
     b = [dt/6., dt/3., dt/3., dt/6.]
 
-    
-    # lets assume that we've already swapped time dimensions so that the 
-    # end-1 position is the "current" timestep and the "end" position can be 
-    # the "next" timestep, which itself is actually the substeps of the RK 
-    # method.
-    #
-    #@views begin 
-    #    normalVelocityCurr = Prog.normalVelocity[:,:,end-1]
-    #    layerThicknessCurr = Prog.layerThickness[:,:,end-1]
-    #    normalVelocityProvis = Prog.normalVelocity[:,:,end]
-    #    layerThicknessProvis = Prog.layerThickness[:,:,end]
-    #end 
-    
-    sshCurr = @view Prog.ssh[:,end-1]
-    normalVelocityCurr = @view Prog.normalVelocity[:,:,end-1]
-    layerThicknessCurr = @view Prog.layerThickness[:,:,end-1]
-    
-    sshProvis = @view Prog.ssh[:,end]
-    normalVelocityProvis = @view Prog.normalVelocity[:,:,end]
-    layerThicknessProvis = @view Prog.layerThickness[:,:,end]
+    # After advance_time_levels!, both [end-1] and [end] hold y_n.
+    # [end-1] is the read-only current state; [end] is scratch for substeps.
+    normalVelocityCurr   = Prog.normalVelocity[end-1]   # Matrix (nVertLevels × nEdges)
+    layerThicknessCurr   = Prog.layerThickness[end-1]   # Matrix (nVertLevels × nCells)
 
-    # unpack the state variable arrays 
     @unpack ssh, normalVelocity, layerThickness = Prog
 
-    # this will be the t+1 timestep, i.e. it's the array the rk4 updates are 
-    # accumulated into, not this is NOT a view b/c that would have the substeps 
-    # being overwritten byt the accumulate step. 
-    #normalVelocityNew = normalVelocity[:,:,end-1] 
-    sshNew = ssh[:,end]
-    normalVelocityNew = normalVelocity[:,:,end]
-    layerThicknessNew = layerThickness[:,:,end]
-    
-    for RK_step in 1:4
-        # compute tenedencies using the provis state
-        computeTendency!(Mesh, Diag, Prog, Tend, :normalVelocity)
-        computeTendency!(Mesh, Diag, Prog, Tend, :layerThickness)
-    
-        # unpack the tendecies for updating the substep state. 
-        @unpack tendNormalVelocity, tendLayerThickness = Tend 
-    
-        # update the substep state which is storred in the final time postion 
-        # of the Prog structure 
-        if RK_step < 4
-            
-            normalVelocityProvis .= normalVelocityCurr .+ a[RK_step] .* tendNormalVelocity
-            layerThicknessProvis .= layerThicknessCurr .+ a[RK_step] .* tendLayerThickness
-            # compute ssh from layerThickness
-            sshProvis = layerThicknessProvis .- sum(Mesh.VertMesh.restingThickness; dims=1)
-            # compute the diagnostics using the Provis State, 
-            # i.e. the substage solution
-            diagnostic_compute!(Mesh, Diag, Prog)
-        end 
+    # Accumulators start at y_n; each stage adds b[k]*k_i so the final
+    # value is y_{n+1} = y_n + dt/6*(k1 + 2k2 + 2k3 + k4).
+    normalVelocityNew   = copy(normalVelocity[end-1])
+    layerThicknessNew   = copy(layerThickness[end-1])
 
-        # accumulate the update in the NEW time position array
-        normalVelocityNew .= normalVelocityNew .+ b[RK_step] .* tendNormalVelocity
-        layerThicknessNew .= layerThicknessNew .+ b[RK_step] .* tendLayerThickness
-        sshNew = layerThicknessNew .- sum(Diag.restingThickness; dims=1)
-    end 
-    
-    # place the NEW solution in the appropriate location in the Prog arrays
-    normalVelocity[:,:,end] = normalVelocityNew
-    layerThickness[:,:,end] = layerThicknessNew
+    nthreads   = 50
+    ssh_kernel! = update_sea_surface_height!(backend, nthreads)
+    ssh_length  = length(ssh[end])
 
-    # put the updated solution back in the Prog strcutre 
-    @pack! Prog = ssh, normalVelocity, layerThickness 
-
-    ## compute diagnostics for new state
     diagnostic_compute!(Mesh, Diag, Prog)
-end 
+
+    for RK_step in 1:4
+        computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
+        computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
+
+        @unpack tendNormalVelocity, tendLayerThickness = Tend
+
+        if RK_step < 4
+            normalVelocity[end] .= normalVelocityCurr .+ a[RK_step] .* tendNormalVelocity
+            layerThickness[end] .= layerThicknessCurr .+ a[RK_step] .* tendLayerThickness
+            ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
+            diagnostic_compute!(Mesh, Diag, Prog)
+        end
+
+        normalVelocityNew .+= b[RK_step] .* tendNormalVelocity
+        layerThicknessNew .+= b[RK_step] .* tendLayerThickness
+    end
+
+    normalVelocity[end] .= normalVelocityNew
+    layerThickness[end] .= layerThicknessNew
+    ssh_kernel!(ssh[end], layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
+
+    @pack! Prog = ssh, normalVelocity, layerThickness
+
+    diagnostic_compute!(Mesh, Diag, Prog)
+end
 
 function ocn_timestep(timestep,
-                      Prog::PrognosticVars, 
+                      Prog::PrognosticVars,
                       Diag::DiagnosticVars,
-                      Tend::TendencyVars, 
-                      S::ModelSetup,
-                      ::Type{ForwardEuler};
-                      backend = CUDABackend())
+                      Tend::TendencyVars,
+                      Mesh::Mesh,
+                      ::Type{ForwardEuler})
+    backend = KernelAbstractions.get_backend(Prog.ssh[end])
 
-    Mesh = S.mesh
-    Clock = S.timeManager
-    Config = S.config
-    
-    # advance the timelevels within the state strcut 
-    advanceTimeLevels!(Prog; backend=backend)
-    
-    # unpack the state variable arrays 
+    # advance the timelevels within the state strcut
+    advance_time_levels!(Prog)
+
+    # unpack the state variable arrays
     @unpack ssh, normalVelocity, layerThickness = Prog
-    
-    # compute the diagnostics
-    diagnostic_compute!(Mesh, Diag, Prog; backend = backend)
 
-    # compute normalVelocity tenedency 
-    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh, Config;
-                                   backend = backend)
-    
+    # compute the diagnostics
+    diagnostic_compute!(Mesh, Diag, Prog)
+
+    # compute normalVelocity tenedency
+    computeNormalVelocityTendency!(Tend, Prog, Diag, Mesh)
+
     # compute layerThickness tendency
-    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh, Config;
-                                   backend = backend)
-    
+    computeLayerThicknessTendency!(Tend, Prog, Diag, Mesh)
+
     # update the state variables by the tendencies
     nthreads = 50
-    tendKernel! = UpdateStateVariable!(backend, nthreads)
+    tendKernel! = forward_euler_step!(backend, nthreads)
 
     tendKernel!(normalVelocity[end], Tend.tendNormalVelocity, timestep, Mesh.HorzMesh.Edges.nEdges, ndrange=Mesh.HorzMesh.Edges.nEdges)
     tendKernel!(layerThickness[end], Tend.tendLayerThickness, timestep, Mesh.HorzMesh.PrimaryCells.nCells, ndrange=Mesh.HorzMesh.PrimaryCells.nCells)
     
     ssh_length = size(ssh[end])[1]
 
-    kernel! = Update_ssh!(backend, nthreads)
+    kernel! = update_sea_surface_height!(backend, nthreads)
     kernel!(ssh[end], Prog.layerThickness[end], Mesh.VertMesh.restingThicknessSum, ssh_length, ndrange=ssh_length)
     
     @pack! Prog = ssh, normalVelocity, layerThickness
     
 end
 
-# Zeros out a vector along its entire length
-@kernel function UpdateStateVariable!(var, @Const(tendVar), @Const(dt), arrayLength)
+# Forward Euler step
+@kernel function forward_euler_step!(var, tendVar, dt, arrayLength)
     j = @index(Global, Linear)
     if j < arrayLength + 1
         var[1,j] = var[1,j] + dt[1] * tendVar[1, j]
@@ -202,7 +182,7 @@ end
 end
 
 
-@kernel function Update_ssh!(ssh, @Const(layerThickness), @Const(restingThicknessSum), arrayLength)
+@kernel function update_sea_surface_height!(ssh, layerThickness, restingThicknessSum, arrayLength)
 
     j = @index(Global, Linear)
     if j < arrayLength + 1

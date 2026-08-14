@@ -1,9 +1,8 @@
 using Test
-using CUDA
 using MOKA
 using UnPack
 using LinearAlgebra
-using CUDA: @allowscalar
+using GPUArraysCore: @allowscalar
 
 import Adapt
 import Downloads
@@ -11,8 +10,7 @@ import KernelAbstractions as KA
 
 mesh_fn = DownloadMesh(PlanarTest)
 
-#backend = KA.CPU()
-backend = CUDABackend();
+backend = KA.CPU();
 
 # Read in the purely horizontal doubly periodic testing mesh
 HorzMesh = ReadHorzMesh(mesh_fn; backend=backend)
@@ -41,7 +39,7 @@ gradAnn = ∇hₑ(setup, PlanarTest)
 
 # Numerical gradient using KernelAbstractions operator 
 gradNum = KA.zeros(backend, Float64, (nVertLevels, nEdges))
-@allowscalar GradientOnEdge!(gradNum, Scalar, MPASMesh; backend=backend)
+@allowscalar GradientOnEdge!(gradNum, Scalar, MPASMesh)
 
 gradError = ErrorMeasures(gradNum, gradAnn, HorzMesh, Edge)
 
@@ -61,7 +59,7 @@ divAnn = div𝐅(setup, PlanarTest)
 divNum = KA.zeros(backend, Float64, (nVertLevels, nCells))
 temp   = KA.zeros(backend, Float64, (nVertLevels, nEdges))
 
-DivergenceOnCell!(divNum, VecEdge, temp, MPASMesh; backend=backend)
+DivergenceOnCell!(divNum, VecEdge, temp, MPASMesh)
 
 divError = ErrorMeasures(divNum, divAnn, HorzMesh, Cell)
 
@@ -79,7 +77,7 @@ VecEdge = 𝐅ₑ(setup, PlanarTest)
 curlAnn = curl𝐅(setup, PlanarTest)
 # Numerical curl using KernelAbstractions operator
 curlNum = KA.zeros(backend, Float64, (nVertLevels, nVertices))
-@allowscalar CurlOnVertex!(curlNum, VecEdge, MPASMesh; backend=backend)
+@allowscalar CurlOnVertex!(curlNum, VecEdge, MPASMesh)
 
 curlError = ErrorMeasures(curlNum, curlAnn, HorzMesh, Vertex)
 

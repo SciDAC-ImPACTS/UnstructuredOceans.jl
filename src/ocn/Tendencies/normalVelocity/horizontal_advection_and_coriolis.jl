@@ -12,9 +12,9 @@ abstract type linearCoriolis <: Coriolis end
 function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
                                                      Prog::PrognosticVars,
                                                      Diag::DiagnosticVars,
-                                                     Mesh::Mesh, 
-                                                     ::Type{linearCoriolis}; 
-                                                     backend = KA.CPU())
+                                                     Mesh::Mesh,
+                                                     ::Type{linearCoriolis})
+    backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh    
     @unpack PrimaryCells, DualCells, Edges = HorzMesh
@@ -48,12 +48,12 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
 end
 
 @kernel function coriolis_force_tendency_kernel!(tendency,
-                                                 @Const(normalVelocity), 
-                                                 @Const(fᵉ), 
-                                                 @Const(nEdgesOnEdge),
-                                                 @Const(edgesOnEdge),
-                                                 @Const(maxLevelEdgeTop),
-                                                 @Const(weightsOnEdge))
+                                                 normalVelocity,
+                                                 fᵉ,
+                                                 nEdgesOnEdge,
+                                                 edgesOnEdge,
+                                                 maxLevelEdgeTop,
+                                                 weightsOnEdge)
     
     # global indices over nEdges
     iEdge = @index(Global, Linear)
