@@ -12,7 +12,9 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
                                               Prog::PrognosticVars,
                                               Diag::DiagnosticVars,
                                               Mesh::Mesh,
-                                              ::Type{Del2})
+                                              ::Type{Del2};
+                                              viscDel2=Mesh.HorzMesh.Edges.momentumDel2,
+                                              nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendNormalVelocity)
 
     @unpack HorzMesh, VertMesh = Mesh
@@ -21,12 +23,10 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
     @unpack maxLevelEdge = VertMesh
     @unpack nEdges, dcEdge, dvEdge = Edges
     @unpack cellsOnEdge, verticesOnEdge, boundaryEdge = Edges
-    viscDel2 = Edges.momentumDel2
 
     @unpack tendNormalVelocity = Tend
     @unpack velocityDivCell, relativeVorticity = Diag
 
-    nthreads = 50
     kernel! = horizontal_momentum_mixing_del2(backend, nthreads)
     kernel!(tendNormalVelocity,
             velocityDivCell,
@@ -40,7 +40,8 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             maxLevelEdge.Top,
             ndrange=nEdges)
 
-    KA.synchronize(backend)
+    # No host KA.synchronize: redundant on a single CUDA stream, and its
+    # nonblocking sync worker segfaults Enzyme reverse mode (see MOKAEnzymeExt).
 
     @pack! Tend = tendNormalVelocity
 end
@@ -68,7 +69,7 @@ end
         @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge]
 
         for k in 1:maxLevelEdgeTop[iEdge]
-            @inbounds tendency[k, iEdge] += viscDel2 * (
+            @inbounds tendency[k, iEdge] += viscDel2[1] * (
                 (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
                 (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
         end

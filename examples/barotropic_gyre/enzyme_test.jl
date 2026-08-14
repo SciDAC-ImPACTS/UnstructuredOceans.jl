@@ -2,6 +2,7 @@ using Test
 using Dates
 import KernelAbstractions as KA
 using Enzyme
+using Checkpointing
 using FiniteDifferences
 using MOKA
 using CUDA
@@ -13,31 +14,31 @@ function ocn_run_with_ad(config_fp, k, backend)
     Setup, Diag, Tend, Prog = ocn_init(config_fp, backend=backend)
     clock, simulationAlarm, outputAlarm = ocn_init_alarms(Setup)
     timestep  = KA.zeros(backend, Float64, (1,))
-    d_timestep = KA.zeros(backend, Float64, (1,))
-    sumGPU    = KA.zeros(backend, Float64, (1,))
-    d_sumGPU  = KA.ones(backend, Float64, (1,))
     @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
 
     Mesh = Setup.mesh
 
-    d_Prog = Enzyme.make_zero(Prog)
-    d_Diag = Enzyme.make_zero(Diag)
-    d_Tend = Enzyme.make_zero(Tend)
+    integrator = parse_integrator(
+        MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+                       "config_time_integrator"))
 
-    autodiff(Enzyme.Reverse,
-        ocn_run_loop,
-        Duplicated(sumGPU, d_sumGPU),
-        Duplicated(timestep, d_timestep),
-        Duplicated(Prog, d_Prog),
-        Duplicated(Diag, d_Diag),
-        Duplicated(Tend, d_Tend),
-        Const(Mesh),
-        Const(ForwardEuler),
-        Const(clock),
-        Const(simulationAlarm),
-        Const(outputAlarm),
-    )
+    # Number of fixed-size timesteps from start until the simulation-end alarm.
+    total_ms = Dates.value(Millisecond(simulationAlarm.ringTime - clock.startTime))
+    dt_ms    = Dates.value(Millisecond(clock.timeStep))
+    nsteps   = Int(total_ms ÷ dt_ms)
 
+    # Bundle the differentiated state into a single OceanModel so Checkpointing.jl can snapshot it.
+    model   = OceanModel(integrator, Prog, Diag, Tend, Mesh, timestep)
+    d_model = OceanModel(integrator,
+                         Enzyme.make_zero(Prog),
+                         Enzyme.make_zero(Diag),
+                         Enzyme.make_zero(Tend),
+                         Mesh,
+                         Enzyme.make_zero(timestep))
+
+    ocn_run_loop_checkpointed!(model, d_model, nsteps; mode = Enzyme.Reverse, nsnaps=4, verbose=1)
+
+    d_Prog = d_model.Prog
     @show d_Prog.normalVelocity[end][1:10]
     @show d_Prog.layerThickness[end][1:10]
 
@@ -64,8 +65,11 @@ function ocn_run_fd(config_fp, k, backend)
         timestep = KA.zeros(backend, Float64, (1,))
         sumGPU   = KA.zeros(backend, Float64, (1,))
         @allowscalar timestep[1] = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
+        integrator = parse_integrator(
+            MOKA.config_get(MOKA.config_get(Setup.config.namelist, "time_integration"),
+                           "config_time_integrator"))
         perturb!(Prog)
-        ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, ForwardEuler,
+        ocn_run_loop(sumGPU, timestep, Prog, Diag, Tend, Setup.mesh, integrator,
                      clock, sim_alarm, out_alarm)
         Array(sumGPU)[1]
     end
@@ -88,7 +92,12 @@ config_fn = "./enzyme_config.yml"
 
 cell = 5
 arch = KA.CPU()
-# arch = GPU()
+# arch = CUDABackend()
+
+# Enzyme reverse mode stores its per-thread tape in device-side malloc'd buffers;
+# the default ~8 MB CUDA heap overflows at model scale and faults with an illegal
+# memory access. Raise it before differentiating (no-op on CPU).
+set_ad_device_heap!(arch)
 
 d_firstlayer_ad, d_firstvelocity_ad = ocn_run_with_ad(config_fn, cell, arch)
 d_firstlayer_fd, d_firstvelocity_fd = ocn_run_fd(config_fn, cell, arch)

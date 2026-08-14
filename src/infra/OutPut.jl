@@ -1,3 +1,16 @@
+"""
+    write_netcdf(Setup, Diag, Prog, d_Prog)
+    write_netcdf(Setup, Diag, Prog)
+
+Write the model state to a NetCDF file in one shot (mesh coordinates plus the
+prognostic and diagnostic fields).
+
+The four-argument method additionally writes the AD shadow/sensitivity fields
+carried in `d_Prog` (as `d_*` variables), for visualizing adjoints. State on a
+GPU backend is copied back to the host before writing. For time-stepped output
+during a run, use [`io_initialize`](@ref) / [`io_write_timestep`](@ref) /
+[`io_finalize`](@ref) instead.
+"""
 function write_netcdf(Setup::ModelSetup,
                       Diag::DiagnosticVars,
                       Prog::PrognosticVars,
@@ -12,8 +25,8 @@ function write_netcdf(Setup::ModelSetup,
     clock = Setup.timeManager
     config = Setup.config
 
-    outputConfig = ConfigGet(config.streams, "output")
-    output_filename = ConfigGet(outputConfig, "filename_template")
+    outputConfig = config_get(config.streams, "output")
+    output_filename = config_get(outputConfig, "filename_template")
     
     # create the netCDF dataset
     ds = NCDataset(output_filename,"c")
@@ -126,8 +139,8 @@ function write_netcdf(Setup::ModelSetup,
     clock = Setup.timeManager
     config = Setup.config
 
-    outputConfig = ConfigGet(config.streams, "output")
-    output_filename = ConfigGet(outputConfig, "filename_template")
+    outputConfig = config_get(config.streams, "output")
+    output_filename = config_get(outputConfig, "filename_template")
 
     # create the netCDF dataset
     ds = NCDataset(output_filename,"c")
@@ -215,11 +228,12 @@ function write_netcdf(Setup::ModelSetup,
 end
 
 """
-    io_initialize(Setup, Diag, Prog) -> NCDataset
+    io_initialize(Setup, Prog) -> NCDataset
 
 Create the output NetCDF file with an unlimited time dimension, write all static
 mesh variables once, and append the initial state (t = 0) as frame 1.
-Returns the open dataset so subsequent frames can be streamed in.
+Returns the open dataset so subsequent frames can be streamed in with
+[`io_write_timestep`](@ref) and closed with [`io_finalize`](@ref).
 """
 function io_initialize(Setup::ModelSetup,
                        Prog::PrognosticVars)
@@ -230,8 +244,8 @@ function io_initialize(Setup::ModelSetup,
     clock  = Setup.timeManager
     config = Setup.config
 
-    outputConfig    = ConfigGet(config.streams, "output")
-    output_filename = ConfigGet(outputConfig, "filename_template")
+    outputConfig    = config_get(config.streams, "output")
+    output_filename = config_get(outputConfig, "filename_template")
 
     ds = NCDataset(output_filename, "c")
 
@@ -308,12 +322,12 @@ function io_initialize(Setup::ModelSetup,
 end
 
 """
-    io_writeTimestep(ds, Setup, Prog, frame)
+    io_write_timestep(ds, Setup, Prog, frame)
 
 Append one snapshot of the prognostic fields at the current clock time to the
 open dataset `ds` at the given (1-based) `frame` index.
 """
-function io_writeTimestep(ds::NCDataset,
+function io_write_timestep(ds::NCDataset,
                           Setup::ModelSetup,
                           Prog::PrognosticVars,
                           frame::Int)

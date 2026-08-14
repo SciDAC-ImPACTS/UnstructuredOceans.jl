@@ -95,11 +95,15 @@ end
     # 1 if the edge touches a missing (0) cell (solid wall), else 0
     boundaryEdge::IV
 
-    # edge-normal wind stress / rho projected onto edge normals [m^2 s^-2]
-    windForcingEdge::FV
+    # NOTE: wind forcing moved to ForcingVars (carried on the Mesh) in Phase 4;
+    # it is no longer a mesh-geometry field.
 
-    # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive
-    momentumDel2::Float64 = 0.0
+    # del2 momentum viscosity [m^2 s^-1]; 0 means mixing is inactive.
+    # Stored as a 1-element device array (not a bare Float64) so it can be passed
+    # to the mixing kernel as a Const array. A by-value Float64 kernel argument is
+    # classified Active by Enzyme under reverse-mode AD ("Active kernel arguments
+    # not supported on GPU"); an array sourced from the Const mesh is inactive.
+    momentumDel2::FV
 end
 
 ###
@@ -140,11 +144,12 @@ end
 end
 
 # (D)ual mesh cell
-@kwdef struct DualCells{I, FV, IM}
+@kwdef struct DualCells{I, FV, IM, FM}
     # I   --> (I)nt
-    # FV  --> (F)loat (V)ector 
-    # IV  --> (I)int  (V)ector 
-    # IM  --> (I)int  (M)atrix  
+    # FV  --> (F)loat (V)ector
+    # IV  --> (I)int  (V)ector
+    # IM  --> (I)int  (M)atrix
+    # FM  --> (F)loat (M)atrix
     
     # dimension info
     nVertices::I
@@ -165,13 +170,19 @@ end
     # inter vertex connecivity
     edgeSignOnVertex::IM #(E)dge (S)ign (o)n Vertex
 
-    # area of triangle 
+    # area of triangle
     areaTriangle::FV
-end 
+
+    # area [m^2] of the kite (portion of a dual triangle) associated with each of
+    # the cellsOnVertex; dim (vertexDegree, nVertices). Used to interpolate
+    # cell-centred fields (e.g. layer thickness) onto vertices for the
+    # vector-invariant potential-vorticity diagnostic.
+    kiteAreasOnVertex::FM
+end
 
 stack(arr, N) = [Tuple(arr[:,i]) for i in 1:N]
 
-function readPrimaryMesh(ds)
+function read_primary_mesh(ds)
     
     # get dimension info 
     nCells  = ds.dim["nCells"] 
@@ -213,7 +224,7 @@ function readPrimaryMesh(ds)
                  edgeSignOnCell = edgeSignOnCell)
 end
 
-function readDualMesh(ds)
+function read_dual_mesh(ds)
 
     # get dimension info 
     nVertices = ds.dim["nVertices"] 
@@ -244,15 +255,24 @@ function readDualMesh(ds)
     # Triangle area
     areaTriangle = ds["areaTriangle"][:]
 
+    # kite areas (portion of each dual triangle per surrounding cell). Default to
+    # zeros if absent — only the vector-invariant PV diagnostic consumes them.
+    if haskey(ds, "kiteAreasOnVertex")
+        kiteAreasOnVertex = ds["kiteAreasOnVertex"][:,:]
+    else
+        kiteAreasOnVertex = zeros(eltype(xᵛ), (vertexDegree, nVertices))
+    end
+
     DualCells(nVertices = nVertices, vertexDegree = vertexDegree,
               xᵛ = xᵛ, yᵛ = yᵛ, zᵛ = zᵛ, fᵛ = fᵛ,
               edgesOnVertex = edgesOnVertex,
               cellsOnVertex = cellsOnVertex,
-              edgeSignOnVertex = edgeSignOnVertex, 
-              areaTriangle = areaTriangle)
-end 
+              edgeSignOnVertex = edgeSignOnVertex,
+              areaTriangle = areaTriangle,
+              kiteAreasOnVertex = kiteAreasOnVertex)
+end
 
-function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+function read_edge_info(ds; momentumDel2::Float64 = 0.0)
 
     # dimension data
     nEdges = ds.dim["nEdges"]
@@ -274,9 +294,15 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
     cellsOnEdge = ds["cellsOnEdge"][:,:]
     verticesOnEdge = ds["verticesOnEdge"][:,:]
 
-    # inter connectivity
-    edgesOnEdge = ds["edgesOnEdge"][:,:]
-    weightsOnEdge = ds["weightsOnEdge"][:,:]
+    # inter connectivity. Stored EDGE-MAJOR ([nEdges, maxEdges2]) — transposed from
+    # the file's [maxEdges2, nEdges] — so the coriolis/advection kernel, whose threads
+    # map to iEdge, reads neighbour data with a coalesced (unit-stride across a warp)
+    # pattern. The file layout made consecutive threads stride maxEdges2 apart, which is
+    # uncoalesced and becomes DRAM-bandwidth-bound once these arrays spill the L2 cache
+    # at high resolution (the source of that kernel's super-linear GPU scaling). This is
+    # the only consumer of their 2-D layout, so the transpose is local to this kernel.
+    edgesOnEdge = permutedims(ds["edgesOnEdge"][:,:])
+    weightsOnEdge = permutedims(ds["weightsOnEdge"][:,:])
 
     dvEdge = ds["dvEdge"][:]
     dcEdge = ds["dcEdge"][:]
@@ -284,24 +310,6 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
 
     # boundary mask: 1 if either neighbour cell is missing (index 0)
     boundaryEdge = Int32.(vec(any(cellsOnEdge .== 0; dims=1)))
-
-    # project wind stress onto edge normals; default to zero if fields absent
-    float_type = eltype(xᵉ)
-    if haskey(ds, "windStressZonal") && haskey(ds, "windStressMeridional")
-        τz_c = float_type.(ds["windStressZonal"][:,1])
-        τm_c = float_type.(ds["windStressMeridional"][:,1])
-        windForcingEdge = zeros(float_type, nEdges)
-        for iEdge in 1:nEdges
-            c1 = cellsOnEdge[1, iEdge]
-            c2 = cellsOnEdge[2, iEdge]
-            τz_e = (c1 == 0 ? τz_c[c2] : (c2 == 0 ? τz_c[c1] : 0.5*(τz_c[c1] + τz_c[c2])))
-            τm_e = (c1 == 0 ? τm_c[c2] : (c2 == 0 ? τm_c[c1] : 0.5*(τm_c[c1] + τm_c[c2])))
-            windForcingEdge[iEdge] = (τz_e * cos(angleEdge[iEdge]) +
-                                      τm_e * sin(angleEdge[iEdge])) / rho
-        end
-    else
-        windForcingEdge = zeros(float_type, nEdges)
-    end
 
     Edges(nEdges = nEdges,
           xᵉ = xᵉ, yᵉ = yᵉ, zᵉ = zᵉ, fᵉ = fᵉ,
@@ -314,11 +322,11 @@ function readEdgeInfo(ds; momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
           dcEdge = dcEdge,
           angleEdge = angleEdge,
           boundaryEdge = boundaryEdge,
-          windForcingEdge = windForcingEdge,
-          momentumDel2 = momentumDel2)
+          # wrap scalar viscosity in a 1-element array (see Edges struct comment)
+          momentumDel2 = [momentumDel2])
 end
 
-function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
+function sign_index_field!(primaryCells::PrimaryCells, edges::Edges)
     
     @unpack cellsOnEdge = edges
     @unpack nCells, edgeSignOnCell, nEdgesOnCell, edgesOnCell = primaryCells
@@ -339,7 +347,7 @@ function signIndexField!(primaryCells::PrimaryCells, edges::Edges)
     @reset primaryCells.edgeSignOnCell = edgeSignOnCell
 end 
 
-function signIndexField!(dualMesh::DualCells, edges::Edges)
+function sign_index_field!(dualMesh::DualCells, edges::Edges)
     
     @unpack verticesOnEdge = edges
     @unpack vertexDegree, nVertices, edgeSignOnVertex, edgesOnVertex = dualMesh 
@@ -361,19 +369,32 @@ function signIndexField!(dualMesh::DualCells, edges::Edges)
     @reset dualMesh.edgeSignOnVertex = edgeSignOnVertex
 end 
 
-function ReadHorzMesh(meshPath::String; backend=KA.CPU(),
-                      momentumDel2::Float64 = 0.0, rho::Float64 = 1000.0)
+"""
+    read_horz_mesh(meshPath; backend=KernelAbstractions.CPU(),
+                 momentumDel2=0.0) -> HorzMesh
+
+Read an MPAS horizontal mesh from the NetCDF file at `meshPath` and return a
+[`HorzMesh`](@ref) with its arrays allocated on `backend`.
+
+Builds the primary cells, dual cells, and edges (including the boundary-edge mask
+and the edge sign fields). `momentumDel2` sets the Laplacian viscosity ``\\nu_2``
+``[\\mathrm{m^2\\,s^{-1}}]`` stored on the edges (0 disables lateral mixing).
+Wind-stress forcing now lives in [`ForcingVars`](@ref) on the [`Mesh`](@ref),
+built separately (see `ocn_setup_mesh`), not on the horizontal mesh.
+"""
+function read_horz_mesh(meshPath::String; backend=KA.CPU(),
+                      momentumDel2::Float64 = 0.0)
 
     ds = NCDataset(meshPath, "r", format=:netcdf4)
 
-    PrimaryMesh = readPrimaryMesh(ds)
-    DualMesh    = readDualMesh(ds)
-    edges       = readEdgeInfo(ds; momentumDel2 = momentumDel2, rho = rho)
+    PrimaryMesh = read_primary_mesh(ds)
+    DualMesh    = read_dual_mesh(ds)
+    edges       = read_edge_info(ds; momentumDel2 = momentumDel2)
     
     # set the edge sign on cells (primary mesh)
-    signIndexField!(PrimaryMesh, edges)
+    sign_index_field!(PrimaryMesh, edges)
     # set the edge sign on vertices (dual mesh)
-    signIndexField!(DualMesh, edges)
+    sign_index_field!(DualMesh, edges)
     
     mesh = HorzMesh(PrimaryMesh, DualMesh, edges)
     
@@ -400,8 +421,7 @@ function Adapt.adapt_structure(to, edges::Edges)
                  dcEdge = Adapt.adapt(to, edges.dcEdge),
                  angleEdge = Adapt.adapt(to, edges.angleEdge),
                  boundaryEdge = Adapt.adapt(to, edges.boundaryEdge),
-                 windForcingEdge = Adapt.adapt(to, edges.windForcingEdge),
-                 momentumDel2 = edges.momentumDel2)
+                 momentumDel2 = Adapt.adapt(to, edges.momentumDel2))
 end
 
 function Adapt.adapt_structure(to, cells::PrimaryCells)
@@ -429,5 +449,6 @@ function Adapt.adapt_structure(to, duals::DualCells)
                      edgesOnVertex = Adapt.adapt(to, duals.edgesOnVertex),
                      cellsOnVertex = Adapt.adapt(to, duals.cellsOnVertex),
                      edgeSignOnVertex = Adapt.adapt(to, duals.edgeSignOnVertex),
-                     areaTriangle = Adapt.adapt(to, duals.areaTriangle))
+                     areaTriangle = Adapt.adapt(to, duals.areaTriangle),
+                     kiteAreasOnVertex = Adapt.adapt(to, duals.kiteAreasOnVertex))
 end

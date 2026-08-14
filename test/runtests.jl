@@ -10,7 +10,7 @@ const _has_gpu = _cuda_ext_loaded && try (GPU(); true) catch; false end
 
 @testset "Moka" begin
 
-    @testset "Infrastructre Test" begin
+    @testset "Infrastructure Tests" begin
         include("infra/test_Config.jl")
         include("infra/test_timeManager.jl")
     end

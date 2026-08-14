@@ -32,6 +32,8 @@ Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.PrimaryCells}) = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.DualCells})    = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Edges})        = true
 Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.ActiveLevels}) = true
+Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.Constants})    = true
+Enzyme.EnzymeRules.inactive_type(::Type{<:MPASMesh.ForcingVars})  = true
 
 # Clock and alarm types contain DateTime / Dict / Period fields that are not
 # differentiable.  Enzyme.make_zero produces invalid shadows for them and can

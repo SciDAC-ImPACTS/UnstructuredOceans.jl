@@ -1,9 +1,9 @@
 using Test
 using Dates
 using UnPack
-using MOKA: Clock, changeTimeStep!, attachAlarm!, advance!,
-            OneTimeAlarm, PeriodicAlarm, isRinging, updateStatus!,
-            rename!, stop!, reset!, mpas_create_clock, Alarm, setCurrentTime! 
+using MOKA: Clock, change_time_step!, attach_alarm!, advance!,
+            OneTimeAlarm, PeriodicAlarm, is_ringing, update_status!,
+            rename!, stop!, reset!, mpas_create_clock, Alarm, set_current_time! 
 # alernatively should make a module for timeMagament / infra 
 # to deal withe the namespace managment there
 
@@ -44,20 +44,20 @@ alarmEveryMonth  = Alarm("Every month",      intervalMonthly ,time0)
 alarmEveryYear   = Alarm("Every year",       intervalAnnually,time0)
 
 # Attach the one-time alarms to the clock
-attachAlarm!(modelClock, alarm2020Mar01)
-attachAlarm!(modelClock, alarm2019Aug24)
-attachAlarm!(modelClock, alarmNewYear2020)
+attach_alarm!(modelClock, alarm2020Mar01)
+attach_alarm!(modelClock, alarm2019Aug24)
+attach_alarm!(modelClock, alarmNewYear2020)
 
 # Attach the periodic alarms to the clock
-attachAlarm!(modelClock, alarmEvery20Min)
-attachAlarm!(modelClock, alarmEvery1Hours)
-attachAlarm!(modelClock, alarmEvery6Hours)
-attachAlarm!(modelClock, alarmEveryDay)
-attachAlarm!(modelClock, alarmEveryMonth)
-attachAlarm!(modelClock, alarmEveryYear)
+attach_alarm!(modelClock, alarmEvery20Min)
+attach_alarm!(modelClock, alarmEvery1Hours)
+attach_alarm!(modelClock, alarmEvery6Hours)
+attach_alarm!(modelClock, alarmEveryDay)
+attach_alarm!(modelClock, alarmEveryMonth)
+attach_alarm!(modelClock, alarmEveryYear)
 
 # Test changing the timestep
-changeTimeStep!(modelClock, interval20Min)
+change_time_step!(modelClock, interval20Min)
 # Retrive the timestep from the clock
 stepCheck = modelClock.timeStep
 
@@ -72,7 +72,7 @@ testCurrTime = DateTime(2019, 01, 01, 00, 00, 00)
 testPrevTime = DateTime(2018, 12, 31, 23, 40, 00) 
 testNextTime = DateTime(2019, 01, 01, 00, 20, 00)
 
-setCurrentTime!(modelClock, testCurrTime)
+set_current_time!(modelClock, testCurrTime)
 
 @test modelClock.currTime == testCurrTime
 @test modelClock.prevTime == testPrevTime
@@ -100,17 +100,17 @@ while modelClock.currTime <= stopTime
     
     # // Check one time Alarms
     if currTime == time2020Mar01
-        @test isRinging(alarm2020Mar01)
+        @test is_ringing(alarm2020Mar01)
         stop!(alarm2020Mar01)
     end
 
     if currTime == time2019Aug24
-        @test isRinging(alarm2019Aug24)
+        @test is_ringing(alarm2019Aug24)
         stop!(alarm2019Aug24)
     end
 
     if currTime == timeNewYear2020
-        @test isRinging(alarmNewYear2020)
+        @test is_ringing(alarmNewYear2020)
         stop!(alarmNewYear2020)
     end
     # //
@@ -123,41 +123,41 @@ while modelClock.currTime <= stopTime
     seconds = Second(currTime).value
 
     # // Check 20 minute alarm
-    ringCheck = isRinging(alarmEvery20Min)
+    ringCheck = is_ringing(alarmEvery20Min)
     
     # Only check this test for the 23rd hour of each day, otherwise we check
     # this condition VERY frequently for a 2 year simulation
     if minutes % 20 == 0 && seconds == 0
-       @test isRinging(alarmEvery20Min)
+       @test is_ringing(alarmEvery20Min)
     end
      
     # // Check hourly alarm
     if minutes == 0 && seconds == 0
-        @test isRinging(alarmEvery1Hours)
+        @test is_ringing(alarmEvery1Hours)
     end
     # //  
 
     # // Check the 6 hour alarm
     if hours % 6 == 0 && minutes == 0 && seconds == 0
-        @test isRinging(alarmEvery6Hours)
+        @test is_ringing(alarmEvery6Hours)
     end
     # //
     
     # // Check the daily alarm 
     if  hours == 0 && minutes == 0 && seconds == 0
-        @test isRinging(alarmEveryDay)
+        @test is_ringing(alarmEveryDay)
     end 
     # //
    
     # // Check the monthly alarm
     if days == 1 && hour == 0 && minutes == 0 && seconds == 0
-        @test isRinging(alarmEveryMonth)
+        @test is_ringing(alarmEveryMonth)
     end
     # //
     
     # // Check the yearly alarm
     if months == 1 && days == 1 && hours == 0 && minutes == 0 && seconds == 0
-        @test isRinging(alarmEveryYear)
+        @test is_ringing(alarmEveryYear)
     end
     # //
 end

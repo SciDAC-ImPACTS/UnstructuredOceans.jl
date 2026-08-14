@@ -23,17 +23,26 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [weakdeps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
+Checkpointing = "eb46d486-4f9c-4c3d-b445-a617f2a2f1ca"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+oneAPI = "8f75cd03-7ff8-4ecb-9b8f-daf728133b1b"
 
 [extensions]
+MOKAAMDGPUExt = "AMDGPU"
 MOKACUDAExt = "CUDA"
+MOKACheckpointingExt = ["Checkpointing", "Enzyme"]
 MOKAEnzymeExt = "Enzyme"
+MOKAoneAPIExt = "oneAPI"
 
 [compat]
+AMDGPU = "1"
 CUDA = "5, 6"
 CUDACore = "6.2.0"
+Checkpointing = "0.12"
 Enzyme = "0.13"
 GPUArraysCore = "0.2"
 Printf = "1.11.0"
+oneAPI = "2"

@@ -194,17 +194,21 @@ function plot_comparison(results::Dict, res_num::String="")
 end
 
 # %% Main
-res     = "10km"
-dir_    = joinpath(@__DIR__, res)
-mesh_fp = joinpath(dir_, "initial_state.nc")
-out_fp  = joinpath(dir_, "output.nc")
+# Guarded so this file can be `include`d as a library (e.g. by convergence.jl)
+# without running the single-resolution comparison / plotting side effects.
+if abspath(PROGRAM_FILE) == @__FILE__
+    res     = "10km"
+    dir_    = joinpath(@__DIR__, res)
+    mesh_fp = joinpath(dir_, "initial_state.nc")
+    out_fp  = joinpath(dir_, "output.nc")
 
-results, mesh_ds = read_and_compare(out_fp, mesh_fp)
-close(mesh_ds)
+    results, mesh_ds = read_and_compare(out_fp, mesh_fp)
+    close(mesh_ds)
 
-println("L2 error norm for $(BC) barotropic streamfunction: ",
-        round(results["l2_err"]; digits=4))
+    println("L2 error norm for $(BC) barotropic streamfunction: ",
+            round(results["l2_err"]; digits=4))
 
-fig = plot_comparison(results, res)
-save(joinpath(@__DIR__, "comparison.png"), fig; px_per_unit = 3)
-display(fig)
+    fig = plot_comparison(results, res)
+    save(joinpath(@__DIR__, "comparison.png"), fig; px_per_unit = 3)
+    display(fig)
+end

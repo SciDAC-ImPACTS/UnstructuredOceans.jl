@@ -1,7 +1,37 @@
 import Adapt
 import KernelAbstractions as KA
 
+# Default KernelAbstractions workgroup size (threads per group) for every compute
+# kernel launch. 64 is a warp/wavefront multiple (2× NVIDIA's 32, an even divisor of
+# AMD's 64), so no lanes sit idle — unlike the historical 50, which left 14 dead lanes
+# in the second 32-wide warp. Every kernel-launching function takes an `nthreads`
+# keyword defaulting to this, so it can be tuned per call/architecture without editing
+# the launch sites. See the benchmark rationale in kernel_benchmark.jl.
+"""
+    DEFAULT_NTHREADS
+
+Default KernelAbstractions workgroup size (threads per group), `64`, used by every
+compute-kernel launch unless overridden via each launcher's `nthreads` keyword.
+It is a warp/wavefront multiple (2× NVIDIA's 32, an even divisor of AMD's 64) so
+no lanes sit idle.
+"""
+const DEFAULT_NTHREADS = 64
+
+"""
+    AbstractArchitecture
+
+Supertype for the compute architectures MOKA runs on. Concrete subtypes are
+[`CPU`](@ref) and [`GPU`](@ref); use [`device`](@ref) to obtain the corresponding
+KernelAbstractions backend.
+"""
 abstract type AbstractArchitecture end
+
+"""
+    AbstractSerialArchitecture <: AbstractArchitecture
+
+Supertype for single-node (non-distributed) architectures — the ones currently
+supported, [`CPU`](@ref) and [`GPU`](@ref).
+"""
 abstract type AbstractSerialArchitecture <: AbstractArchitecture end
 
 """
@@ -21,23 +51,69 @@ struct GPU{D} <: AbstractSerialArchitecture
     device :: D
 end
 
-# Bridge to the KA.Backend runtime
+"""
+    device(arch::AbstractArchitecture)
+
+Return the KernelAbstractions backend for `arch`: `KernelAbstractions.CPU()` for
+[`CPU`](@ref), or the stored device backend for a [`GPU`](@ref). This backend is
+what gets passed as the `backend` keyword to [`ocn_init`](@ref) and the array
+constructors.
+"""
 device(::CPU) = KA.CPU()
 device(a::GPU) = a.device
 
 device!(::CPU, i) = nothing
 
+"""
+    set_ad_device_heap!(arch; bytes)
+
+Raise the device-side dynamic-allocation (`malloc`) heap so that Enzyme
+reverse-mode AD has room for its tape.
+
+Enzyme's split reverse mode stores the per-thread tape in buffers obtained from
+the GPU's in-kernel `malloc`. The default device heap (~8 MB on CUDA) overflows
+once the differentiated kernels run at model scale (e.g. the coriolis tendency
+scatters over `nEdges × nEdgesOnEdge` entries); `malloc` then returns NULL and
+the augmented-forward kernel faults with an illegal memory access. Call this
+once, after selecting the backend and before `autodiff`. No-op on CPU and on
+backends that don't need it; the CUDA implementation lives in `MOKACUDAExt`.
+
+Returns the heap size in bytes that is in effect afterwards (or `nothing`).
+"""
+set_ad_device_heap!(arch; bytes::Integer = 512 * 1024 * 1024) = nothing
+set_ad_device_heap!(::CPU; bytes::Integer = 0) = nothing
+
 synchronize(::CPU) = KA.synchronize(KA.CPU())
 synchronize(a::AbstractArchitecture) = KA.synchronize(a.device)
 
+"""
+    architecture(x)
+
+Infer the [`AbstractArchitecture`](@ref) that an array (or array-like) `x` lives
+on. Returns [`CPU`](@ref)`()` for a host `Array`, and `nothing` for scalars.
+GPU array types register their own methods in the vendor extensions.
+"""
 architecture() = nothing
 architecture(::Number) = nothing
 architecture(::Array) = CPU()
 architecture(a::SubArray) = architecture(parent(a))
 
+"""
+    array_type(arch::AbstractArchitecture)
+
+Return the array type used on `arch` (`Array` for [`CPU`](@ref); the device array
+type for a [`GPU`](@ref), registered by the vendor extension).
+"""
 array_type(::CPU) = Array
 
-# Fallback: pass through
+"""
+    on_architecture(arch, x)
+
+Move `x` (an array, tuple, or named tuple of arrays) onto architecture `arch`,
+returning host arrays for [`CPU`](@ref) and device arrays for a [`GPU`](@ref).
+Values already on the target (or that need no transfer, e.g. ranges) are passed
+through unchanged.
+"""
 on_architecture(arch, a) = a
 
 # Back-compat: raw KA.Backend form used in test/ocn/test_GPU.jl

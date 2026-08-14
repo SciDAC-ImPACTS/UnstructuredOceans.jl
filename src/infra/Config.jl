@@ -39,28 +39,54 @@ Allow the type info to be passed so that it
 can be used to create a new instance if string 
 corresponds to header, not a config option. 
 """
-function ConfigGet(d::C, s::String) where {C<:yaml_config}
-    
+function config_get(d::C, s::String) where {C<:yaml_config}
+
+    # Friendly error on a missing key instead of a bare KeyError, listing the
+    # available keys at this level (helps catch typos / missing sections).
+    if !haskey(d.dict, s)
+        keys_str = join(sort!(string.(collect(keys(d.dict)))), ", ")
+        error("config_get: key \"$s\" not found. Available keys: [$keys_str]")
+    end
+
     # access the underlying dictionary contained within the object
-    # and use key (string) to get config info 
+    # and use key (string) to get config info
     c = d.dict[s]
-    
-    # if a dictionary is returned that means we have reached the bottom 
-    # level of the yaml tree, instead return a new instance of the 
-    # configuration struct. 
+
+    # if a dictionary is returned that means we have reached the bottom
+    # level of the yaml tree, instead return a new instance of the
+    # configuration struct.
     if typeof(c) == dict_type
-        return C(c) 
+        return C(c)
     else
         return c
     end
 end
 
+"""
+    config_get(d, key, default)
+
+Return the config value for `key`, or `default` if the key is absent. Use for
+optional settings so a missing key yields a documented default rather than an
+error. (The two-argument [`config_get`](@ref) errors on a missing key.)
+"""
+function config_get(d::C, s::String, default) where {C<:yaml_config}
+    haskey(d.dict, s) || return default
+    return config_get(d, s)
+end
+
+"""
+    config_has(d, key) -> Bool
+
+Whether `key` exists at this config level. Thin wrapper over the underlying dict.
+"""
+config_has(d::C, s::String) where {C<:yaml_config} = haskey(d.dict, s)
+
 """ Method for adding a new configuration option (and value)
 """
-function ConfigAdd(d::C, s::String, val) where {C<:yaml_config}
+function config_add(d::C, s::String, val) where {C<:yaml_config}
 
     if haskey(d.dict, s)
-        error("ConfigAdd: variable $(s) already exists use ConfigSet instead")
+        error("config_add: variable $(s) already exists use config_set instead")
     else
         d.dict[s] = val
     end
@@ -68,20 +94,20 @@ end
 
 """ Method for overwriting value of existing configuration setting
 """
-function ConfigSet(d::C, s::String, val) where {C<:yaml_config}
+function config_set(d::C, s::String, val) where {C<:yaml_config}
 
     if haskey(d.dict, s)
 
         # check that the type of the new value is the same as existing
         if typeof(d.dict[s]) != typeof(val)
-            @warn """ConfigSet: Changing typeof \"$(s)\",
+            @warn """config_set: Changing typeof \"$(s)\",
                      $(typeof(d.dict[s])) != $(typeof(val))
                   """
         end
 
         d.dict[s] = val
     else
-        error("ConfigSet: Could not find variable $(s)")
+        error("config_set: Could not find variable $(s)")
     end
 end
 
@@ -93,7 +119,7 @@ end
     5. config write 
 =# 
 
-function ConfigRead(filepath::AbstractString)
+function config_read(filepath::AbstractString)
 
     # check that the config YAML file exists
     if !isfile(filepath)
@@ -127,7 +153,7 @@ function parse_Datetimes(dict::Dict{Any,Any})
 
         # check if the timestamp pattern occurs in the string values
         if value isa String && occursin(timestamp_pat, value)
-            dict[key] = DateTime_from_String(value)
+            dict[key] = datetime_from_string(value)
         end 
     end
 
@@ -161,7 +187,7 @@ function index_to_period(captures)
     idx == 6 && return Second(captures[idx])
 end
 
-function DateTime_from_String(string::String)
+function datetime_from_string(string::String)
 
     mat = match(timestamp_pat, string)
 

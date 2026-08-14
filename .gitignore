@@ -31,3 +31,10 @@ sbatch_logs/
 
 # Custom
 _research/
+
+# Overleaf paper clone (has its own .git; not part of the package)
+paper/
+
+# Documenter build output
+docs/build/
+docs/Manifest.toml

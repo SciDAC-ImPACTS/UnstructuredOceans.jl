@@ -2,7 +2,8 @@
 function horizontal_advection_tendency!(Tend::TendencyVars,
                                         Prog::PrognosticVars,
                                         Diag::DiagnosticVars,
-                                        Mesh::Mesh)
+                                        Mesh::Mesh;
+                                        nthreads=DEFAULT_NTHREADS)
     backend = KA.get_backend(Tend.tendLayerThickness)
 
     @unpack HorzMesh, VertMesh = Mesh    
@@ -18,10 +19,7 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
     # unpack the layer thickness tendency term (@Cells)
     @unpack tendLayerThickness = Tend 
 
-    # initialize the kernel
-    nthreads = 50
     kernel!  = thicknessFluxDivOnCell!(backend, nthreads)
-    # use kernel to compute divergence of the thickness flux
     kernel!(tendLayerThickness,
             thicknessFlux,
             nEdgesOnCell,     
@@ -32,38 +30,34 @@ function horizontal_advection_tendency!(Tend::TendencyVars,
             areaCell, 
             ndrange=nCells)
 
-    # sync the backend 
-    KA.synchronize(backend)
-    
-    # pack the tendecy pack into the struct for further computation
     @pack! Tend = tendLayerThickness 
 end
 
 @kernel function thicknessFluxDivOnCell!(tendency,
-                                         thicknessFlux,
-                                         nEdgesOnCell,
-                                         edgesOnCell,
-                                         maxLevelEdgeTop,
-                                         edgeSignOnCell,
-                                         dvEdge,
-                                         areaCell)
+                                         @Const(thicknessFlux),
+                                         @Const(nEdgesOnCell),
+                                         @Const(edgesOnCell),
+                                         @Const(maxLevelEdgeTop),
+                                         @Const(edgeSignOnCell),
+                                         @Const(dvEdge),
+                                         @Const(areaCell))
 
     iCell = @index(Global, Linear)
 
     # get inverse cell area
-    invArea = 1. / areaCell[iCell]
+    @inbounds invArea = 1. / areaCell[iCell]
 
-    # create tmp varibale to store div reduction
-    #div = @localmem eltype(DivCell) (1) 
-    
     # loop over number of edges in primary cell
-    for i in 1:nEdgesOnCell[iCell]
-        iEdge = edgesOnCell[i,iCell]
+    @inbounds for i in 1:nEdgesOnCell[iCell]
+        @inbounds iEdge = edgesOnCell[i,iCell]
+        # dvEdge[iEdge], edgeSignOnCell[i,iCell] and invArea are all invariant in k:
+        # fold them into one per-edge coefficient so the vertical loop is a single
+        # load (thicknessFlux) + FMA per level instead of three loads and three
+        # multiplies.
+        @inbounds coef = dvEdge[iEdge] * edgeSignOnCell[i,iCell] * invArea
         # loop over the number of (active) vertical layers
-        for k in 1:maxLevelEdgeTop[iEdge]
-            tendency[k,iCell] += thicknessFlux[k,iEdge] * dvEdge[iEdge] *
-                                 edgeSignOnCell[i,iCell] * invArea
-            #tendency[k,iCell] = thicknessFlux[k,iEdge]
+        @inbounds for k in 1:maxLevelEdgeTop[iEdge]
+            tendency[k,iCell] += thicknessFlux[k,iEdge] * coef
         end
     end
 end
