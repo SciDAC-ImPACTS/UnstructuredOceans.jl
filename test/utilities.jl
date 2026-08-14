@@ -53,6 +53,21 @@ struct TestSetup{FT, IT, AT}
     nVertLevels::IT
 end 
 
+function DownloadMesh(::Type{PlanarTest})
+
+    mesh_url = "https://gist.github.com/mwarusz/"*
+               "f8caf260398dbe140d2102ec46a41268/raw/"*
+               "e3c29afbadc835797604369114321d93fd69886d/"*
+               "PlanarPeriodic48x48.nc"
+
+    # set the path to the top test directory
+    mesh_fn = joinpath(@__DIR__, "MokaMesh.nc")
+
+    Downloads.download(mesh_url, mesh_fn)
+
+    return mesh_fn
+end
+
 function TestSetup(Mesh::Mesh, ::Type{PlanarTest}; backend=KA.CPU())
     
     @unpack HorzMesh = Mesh
