@@ -29,3 +29,9 @@ julia --project=. src/driver/mpas_ocean.jl examples/barotropic_gyre/10km/config.
   package extensions.
 - **Differentiable** — forward- and checkpointed reverse-mode gradients via
   Enzyme.jl and Checkpointing.jl, validated against finite differences.
+
+## Acknowledgement
+This material is based upon work supported by the the U.S. Department of Energy, Office of Science, Office of Advanced Scientific Computing Research Applied Mathematics and SciDAC programs, and Office of Biological and Environmental Research SciDAC program under Contract No. DE-AC02-06CH11357. 
+Additional support was provided through NSF Cyberinfrastructure for Sustained Scientific Innovation (CSSI) award numbers: 2104068, 2103942 (DJ4Earth).
+We gratefully acknowledge the computing resources provided and operated by the Joint Laboratory for System Evaluation (JLSE) at Argonne National Laboratory. This research used resources of the Argonne Leadership Computing Facility, which is a U.S. Department of Energy Office of Science User Facility operated under contract DE-AC02-06CH11357.
+This package was developed in part with the help of Claude Code from Anthropic.
