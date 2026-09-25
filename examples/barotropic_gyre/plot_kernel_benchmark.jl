@@ -63,12 +63,13 @@ uniq_kernels = unique(kernel)                    # stable first-seen (pipeline) 
 # gap reads at a glance; GPU vendors are solid with distinct cool/vendor colors. Any
 # backend not in these maps falls back to a gray solid line so an unknown vendor still
 # plots.
-const BORDER  = ["CPU", "CUDA", "AMD", "oneAPI"]
-bcolor  = Dict("CPU" => :darkorange2, "CUDA" => :seagreen4,
-               "AMD" => :firebrick3, "oneAPI" => :dodgerblue3)
-bstyle  = Dict("CPU" => :dash, "CUDA" => :solid, "AMD" => :solid, "oneAPI" => :solid)
-bmarker = Dict("CPU" => :utriangle, "CUDA" => :circle,
-               "AMD" => :diamond, "oneAPI" => :rect)
+const BORDER  = ["CPU", "CUDA", "AMD", "oneAPI", "GPU"]
+bcolor  = Dict("CPU" => :darkorange2, "CUDA" => :seagreen4, "AMD" => :firebrick3,
+               "oneAPI" => :dodgerblue3, "GPU" => :seagreen4)
+bstyle  = Dict("CPU" => :dash, "CUDA" => :solid, "AMD" => :solid,
+               "oneAPI" => :solid, "GPU" => :solid)
+bmarker = Dict("CPU" => :utriangle, "CUDA" => :circle, "AMD" => :diamond,
+               "oneAPI" => :rect, "GPU" => :circle)
 
 # Backends present, in the canonical CPU→GPU order, with any extras appended.
 present = unique(backend)

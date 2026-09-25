@@ -158,10 +158,10 @@ function diagnostic_compute!(Mesh::Mesh,
                              Prog::PrognosticVars;
                              nthreads=DEFAULT_NTHREADS)
 
+    calculate_layer_thickness_edge!(Diag, Prog, Mesh; nthreads=nthreads)
     calculate_thickness_flux!(Diag, Prog, Mesh; nthreads=nthreads)
     calculate_velocity_div_cell!(Diag, Prog, Mesh; nthreads=nthreads)
     calculate_relative_vorticity!(Diag, Prog, Mesh; nthreads=nthreads)
-    calculate_layer_thickness_edge!(Diag, Prog, Mesh; nthreads=nthreads)
 end
 
 #= Preformance Note:
@@ -226,9 +226,11 @@ function calculate_velocity_div_cell!(Diag::DiagnosticVars,
                                     nthreads=DEFAULT_NTHREADS)
 
     normalVelocity = Prog.normalVelocity[end]
-    @unpack velocityDivCell, layerThicknessEdge = Diag
+    @unpack velocityDivCell = Diag
 
-    DivergenceOnCell!(velocityDivCell, normalVelocity, layerThicknessEdge, Mesh; nthreads=nthreads)
+    # DivergenceOnCell! overwrites its `temp` argument as edge-sized scratch, so it must be a throwaway buffer, not a live diagnostic field. Passing layerThicknessEdge here corrupts it (→ 0 when normalVelocity is 0), which then blows up the wind-forcing tendency's 1/layerThicknessEdge divide.
+    divScratch = similar(normalVelocity)
+    DivergenceOnCell!(velocityDivCell, normalVelocity, divScratch, Mesh; nthreads=nthreads)
 
     @pack! Diag = velocityDivCell
 end

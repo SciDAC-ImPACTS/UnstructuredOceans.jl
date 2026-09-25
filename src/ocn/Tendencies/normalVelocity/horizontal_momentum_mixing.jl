@@ -38,6 +38,7 @@ function horizontal_momentum_mixing_tendency!(Tend::TendencyVars,
             viscDel2,
             boundaryEdge,
             maxLevelEdge.Top,
+            Val(VertMesh.nVertLevels),   # static vertical bound for a register-resident Enzyme tape
             ndrange=nEdges)
 
     # No host KA.synchronize: redundant on a single CUDA stream, and its
@@ -55,7 +56,8 @@ end
                                                   @Const(dvEdge),
                                                   viscDel2,
                                                   @Const(boundaryEdge),
-                                                  @Const(maxLevelEdgeTop))
+                                                  @Const(maxLevelEdgeTop),
+                                                  ::Val{nVertLevels}) where {nVertLevels}
 
     iEdge = @index(Global, Linear)
 
@@ -68,10 +70,19 @@ end
         @inbounds @private dcEdgeInv = 1.0 / dcEdge[iEdge]
         @inbounds @private dvEdgeInv = 1.0 / dvEdge[iEdge]
 
-        for k in 1:maxLevelEdgeTop[iEdge]
-            @inbounds tendency[k, iEdge] += viscDel2[1] * (
-                (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
-                (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
+        # Static bound `nVertLevels` (a compile-time `Val`) instead of the runtime
+        # `maxLevelEdgeTop[iEdge]`: keeps Enzyme's reverse tape in registers rather
+        # than a per-thread device `malloc` (serialized global lock) that dominates
+        # the GPU adjoint. The `k <= nLevels` guard reproduces the exact active-level
+        # sum; a structured `if` (not an early `break`/`continue`) differentiates
+        # correctly under Enzyme reverse.
+        @inbounds nLevels = maxLevelEdgeTop[iEdge]
+        for k in 1:nVertLevels
+            if k <= nLevels
+                @inbounds tendency[k, iEdge] += viscDel2[1] * (
+                    (div[k, iCell2]    - div[k, iCell1])    * dcEdgeInv -
+                    (relVort[k, iVertex2] - relVort[k, iVertex1]) * dvEdgeInv)
+            end
         end
     end
 end

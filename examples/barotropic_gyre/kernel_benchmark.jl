@@ -38,24 +38,14 @@
 #
 # Run with:  julia --project=. examples/barotropic_gyre/kernel_benchmark.jl
 #
-# GPU vendors: whichever of CUDA (NVIDIA) and AMDGPU (AMD/ROCm) are installed and
-# functional are detected and swept; the default sweep is GPU-only (the CPU is opt-in
-# via KBENCH_BACKENDS=CPU) so per-kernel GPU numbers aren't crowded by the CPU.
+# Backends: the CPU and every functional CUDA (NVIDIA) or AMDGPU (AMD/ROCm) device
+# detected at startup are swept. This makes each output file directly comparable across
+# the host and its accelerators without requiring shell configuration.
 #
 # HPC-friendly output: the CSV is APPENDED to (not overwritten) and every row is
 # stamped with the host node, the concrete device string, and a UTC timestamp, so
 # per-kernel timings gathered from GPUs on different compute nodes accumulate into one
-# shared file and stay attributable. Redirect the file with KBENCH_CSV.
-#
-# Environment overrides (all optional):
-#   KBENCH_BACKENDS=CUDA,AMD   # subset of CUDA,AMD,CPU        (default: all detected GPUs)
-#   KBENCH_RES=5km,10km,20km,40km       # subset/order of resolutions  (default: all found)
-#   KBENCH_SAMPLES=200         # timed samples per kernel      (default 200)
-#   KBENCH_SECONDS=30          # BenchmarkTools budget/kernel  (default 30)
-#   KBENCH_REPEATS=1           # kernel launches per sample (amortizes launch overhead)
-#   KBENCH_CUDA_DEVICE=1       # CUDA device index             (default 1)
-#   KBENCH_AMD_DEVICE=1        # AMD/ROCm device index         (default 1)
-#   KBENCH_CSV=/path/out.csv   # output CSV (default: kernel_benchmark.csv here)
+# shared file and stay attributable.
 
 using Dates
 import KernelAbstractions as KA
@@ -67,19 +57,17 @@ using Printf
 
 # --- GPU vendors ----------------------------------------------------------------
 # Detect and load whichever GPU vendor packages are installed + functional, picking a
-# device on each. Each contributes a "name => KA backend" pair to GPU_BACKENDS and a
+# device on each. Each contributes a "name => KA backend" pair to BACKENDS and a
 # hardware string to DEVICE_LABELS (written into every row for multi-node provenance).
 # @allowscalar above is GPUArraysCore's vendor-agnostic version (works for CuArray and
-# ROCArray). Runtime comparisons are GPU-vs-GPU, so the CPU is excluded here (opt-in via
-# KBENCH_BACKENDS=CPU; see selected_backends).
-const GPU_BACKENDS  = Pair{String,Any}[]
+# ROCArray). The CPU is always included; detected accelerators are appended below.
+const BACKENDS      = Pair{String,Any}["CPU" => KA.CPU()]
 const DEVICE_LABELS = Dict{String,String}("CPU" => Sys.CPU_NAME)
 
 try
     @eval import CUDA
     if CUDA.functional()
-        CUDA.device!(parse(Int, get(ENV, "KBENCH_CUDA_DEVICE", get(ENV, "KBENCH_DEVICE", "0"))))
-        push!(GPU_BACKENDS, "CUDA" => CUDA.CUDABackend())
+        push!(BACKENDS, "CUDA" => CUDA.CUDABackend())
         DEVICE_LABELS["CUDA"] = CUDA.name(CUDA.device())
     end
 catch err
@@ -89,16 +77,14 @@ end
 try
     @eval import AMDGPU
     if AMDGPU.has_rocm_gpu()
-        AMDGPU.device_id!(parse(Int, get(ENV, "KBENCH_AMD_DEVICE", "1")))
-        push!(GPU_BACKENDS, "AMD" => AMDGPU.ROCBackend())
+        push!(BACKENDS, "AMD" => AMDGPU.ROCBackend())
         DEVICE_LABELS["AMD"] = AMDGPU.HIP.name(AMDGPU.device())
     end
 catch err
     @debug "AMDGPU not available for the kernel benchmark" exception = err
 end
 
-isempty(GPU_BACKENDS) && @warn "No functional GPU (CUDA or AMD) detected; only \
-    KBENCH_BACKENDS=CPU will produce results."
+length(BACKENDS) == 1 && @warn "No functional GPU (CUDA or AMD) detected; benchmarking CPU only."
 
 device_label(bname) = get(DEVICE_LABELS, bname, "unknown")
 const HOSTNAME = gethostname()
@@ -126,26 +112,11 @@ const ALL_RES = [
     (name = "2.5km", dir = joinpath(BG, "2.5km"), config = "config.yml"),
 ]
 
-function selected_resolutions()
-    found = filter(r -> isfile(joinpath(r.dir, r.config)), ALL_RES)
-    haskey(ENV, "KBENCH_RES") || return found
-    want = split(ENV["KBENCH_RES"], ',')
-    return [r for w in want for r in found if r.name == w]
-end
-
-# Default sweep is GPU-only (all detected vendors); the CPU is opt-in via
-# KBENCH_BACKENDS (e.g. =CUDA,CPU or =CPU) for a one-off cross-check.
-function selected_backends()
-    haskey(ENV, "KBENCH_BACKENDS") || return copy(GPU_BACKENDS)
-    available = copy(GPU_BACKENDS)
-    push!(available, "CPU" => KA.CPU())
-    want = split(ENV["KBENCH_BACKENDS"], ',')
-    return filter(p -> first(p) in want, available)
-end
-
-const SAMPLES = parse(Int,     get(ENV, "KBENCH_SAMPLES", "200"))
-const SECONDS = parse(Float64, get(ENV, "KBENCH_SECONDS", "30"))
-const REPEATS = parse(Int,     get(ENV, "KBENCH_REPEATS", "1"))
+const RESOLUTIONS = filter(r -> isfile(joinpath(r.dir, r.config)), ALL_RES)
+const SAMPLES = 200
+const SECONDS = 30.0
+const REPEATS = 1
+const CSV = joinpath(BG, "kernel_benchmark.csv")
 
 _dt_seconds(Setup) = convert(Float64, Dates.value(Second(Setup.timeManager.timeStep)))
 
@@ -174,7 +145,7 @@ const KERNELS = Kernel[
     Kernel("normalVelTend", "pressureGradient",   :nEdges, st -> nV.pressure_gradient_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.sshGradient)),
     Kernel("normalVelTend", "advectionCoriolis",  :nEdges, st -> nV.horizontal_advection_and_coriolis_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.linearCoriolis)),
     Kernel("normalVelTend", "momentumMixing",     :nEdges, st -> nV.horizontal_momentum_mixing_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh, nV.Del2)),
-    Kernel("normalVelTend", "windForcing",        :nEdges, st -> nV.wind_forcing_tendency!(st.Tend, st.Diag, st.Mesh)),
+    Kernel("normalVelTend", "windForcing",        :nEdges, st -> nV.forcing_tendency!(st.Tend, st.Diag, st.Mesh, UnstructuredOceans.NormalVelocity.WindForcing)),
     # layerThickness tendency
     Kernel("layerThkTend", "thicknessFluxDiv",    :nCells, st -> lT.horizontal_advection_tendency!(st.Tend, st.Prog, st.Diag, st.Mesh)),
     # time integration
@@ -253,14 +224,6 @@ ns_per_launch(trial) = (min    = minimum(trial).time / REPEATS,
                         mean   = BenchmarkTools.mean(trial).time / REPEATS,
                         n      = length(trial.times))
 
-# --- Append-mode CSV writer ------------------------------------------------------
-# APPEND rather than overwrite so per-kernel results gathered from GPUs across many HPC
-# compute nodes — each job writing to a shared file on a common filesystem — accumulate
-# into ONE table instead of clobbering each other. Every row carries host/device/
-# timestamp provenance (see main) so appended rows stay attributable and de-dupable.
-# The header is written only when the file is first created; on a pre-existing file we
-# verify the stored header matches before appending and refuse to corrupt a file with a
-# different (older) schema. Use a per-node KBENCH_CSV to avoid concurrent writers.
 function append_rows!(out, header, rows)
     exists = isfile(out) && filesize(out) > 0
     if exists
@@ -271,7 +234,7 @@ function append_rows!(out, header, rows)
               existing: $existing
               expected: $wanted
             Appending would misalign columns. Remove/rename the old file (or set a
-            different KBENCH_CSV) and re-run.""")
+            different output path in this script) and re-run.""")
     end
     open(out, "a") do io
         exists || writedlm(io, header, ',')      # header only on first creation
@@ -281,8 +244,8 @@ function append_rows!(out, header, rows)
 end
 
 function main()
-    backends    = selected_backends()
-    resolutions = selected_resolutions()
+    backends    = BACKENDS
+    resolutions = RESOLUTIONS
     isempty(resolutions) && error("No barotropic-gyre resolutions found to benchmark.")
     stamp = Dates.format(Dates.now(Dates.UTC), "yyyy-mm-ddTHH:MM:SSZ")
 
@@ -324,9 +287,8 @@ function main()
     # host/device/timestamp/commit/julia/nthreads identify which node+GPU+code produced
     # each row (appended-file safe); integrator records which time-stepper was timed.
     header = ["host" "device" "timestamp" "commit" "julia" "nthreads" "backend" "res" "integrator" "nEdges" "nCells" "nVertices" "group" "kernel" "extent" "extent_count" "samples" "min_ns" "median_ns" "mean_ns" "ns_per_elem"]
-    out    = get(ENV, "KBENCH_CSV", joinpath(BG, "kernel_benchmark.csv"))
-    append_rows!(out, header, rows)
-    println("\nAppended $(length(rows)) row(s) to $out")
+    append_rows!(CSV, header, rows)
+    println("\nAppended $(length(rows)) row(s) to $CSV")
 end
 
 main()

@@ -13,7 +13,8 @@ driver="src/driver/mpas_ocean.jl"
 execut="${gitdir}/${driver}"
 
 for dir in 200km 100km 50km 25km; do
-    python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
+    # Uncomment if you have MPAS-Ocean installed and want to generate the meshes
+    # python setup.py --res $(echo $dir | sed 's/[^0-9]//g') --dir $dir
 
     cd $dir
     cp ../UnstructuredOceans.yaml ./config.yml
@@ -34,7 +35,7 @@ for dir in 200km 100km 50km 25km; do
     start=$(date +%s.%N)
 
     #srun -n 1 julia --project=$gitdir -- $execut config.yml  
-    julia -O0 --color=yes --project=$gitdir -- $execut config.yml
+    julia -O0 --color=yes --project=$gitdir -- $execut config.yml $1
 
     end=$(date +%s.%N)
     

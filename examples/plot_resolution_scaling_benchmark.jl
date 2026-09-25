@@ -72,10 +72,14 @@ probname_of(problem) = get(probtitle, problem, problem)
 # Per-backend styling. GPU vendors are solid lines; the CPU (only present when a
 # cross-check run recorded it) is dashed. Unknown backend names fall back to the
 # defaults in plot_dataset.
-bstyle    = Dict("CUDA" => :solid, "AMD" => :solid, "GPU" => :solid, "CPU" => :dash)
-bmarker   = Dict("CUDA" => :circle, "AMD" => :diamond, "GPU" => :circle, "CPU" => :utriangle)
-bcolor    = Dict("CUDA" => :dodgerblue3, "AMD" => :firebrick3, "GPU" => :dodgerblue3,
-                 "CPU" => :darkorange2)
+# Canonical backend styling, shared across all benchmark plots: each GPU vendor is a
+# solid line in a distinct color; unknown backends fall back to gray + ✕.
+bcolor    = Dict("CPU" => :darkorange2, "CUDA" => :seagreen4, "AMD" => :firebrick3,
+                 "oneAPI" => :dodgerblue3, "GPU" => :seagreen4)
+bstyle    = Dict("CPU" => :dash, "CUDA" => :solid, "AMD" => :solid,
+                 "oneAPI" => :solid, "GPU" => :solid)
+bmarker   = Dict("CPU" => :utriangle, "CUDA" => :circle, "AMD" => :diamond,
+                 "oneAPI" => :rect, "GPU" => :circle)
 
 # Helper: sorted (x, y) for a backend selection within one dataset. The CSV is
 # append-mode and may hold several rows for the same (backend, ncells) — repeat runs
@@ -173,9 +177,9 @@ function plot_case(data, label, png)
         x, y = series(data, b)
         isempty(x) && continue
         scatterlines!(ax1, x, y;
-                      color = get(bcolor, b, :black),
+                      color = get(bcolor, b, :gray30),
                       linestyle = get(bstyle, b, :solid),
-                      marker = get(bmarker, b, :diamond), markersize = 11,
+                      marker = get(bmarker, b, :xcross), markersize = 11,
                       linewidth = 2, label = b)
     end
 

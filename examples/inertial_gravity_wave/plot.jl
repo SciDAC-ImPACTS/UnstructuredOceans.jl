@@ -39,7 +39,7 @@ function ExactSolution(ds::NCDataset)
 
     bottom_depth = 1000.0
     f0   = 1e-4
-    eta0 = 1.0
+    eta0 = 0.01  # SSH amplitude [m]; must match ETA_0 in setup.py
     lx   = 10000.0
     npx  = 2.0
     npy  = 2.0

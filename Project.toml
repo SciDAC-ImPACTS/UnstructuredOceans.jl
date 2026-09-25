@@ -1,6 +1,6 @@
 name = "UnstructuredOceans"
 uuid = "4c5738b9-ea62-4abc-b436-bc5c16744d63"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["SciDAC Team"]
 
 [deps]

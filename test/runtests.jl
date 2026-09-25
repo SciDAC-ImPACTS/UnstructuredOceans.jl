@@ -25,6 +25,7 @@ const _has_gpu = _cuda_ext_loaded && try (GPU(); true) catch; false end
         end
         @testset "Enzyme Tests" begin
             include("enzyme/test_Enzyme_Operators.jl")
+            include("enzyme/test_Enzyme_model_gradient.jl")
         end
     end
 end

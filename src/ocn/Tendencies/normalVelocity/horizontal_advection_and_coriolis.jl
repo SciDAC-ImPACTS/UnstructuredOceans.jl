@@ -35,8 +35,10 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
             fᵉ, 
             nEdgesOnEdge, 
             edgesOnEdge,
-            maxLevelEdge.Top, 
-            weightsOnEdge, 
+            maxLevelEdge.Top,
+            weightsOnEdge,
+            Val(size(edgesOnEdge, 2)),   # maxEdgesOnEdge (edge-major: neighbour dim is 2)
+            Val(VertMesh.nVertLevels),   # static vertical bound
             ndrange = nEdges)
 
     # pack the tendecy pack into the struct for further computation
@@ -44,12 +46,14 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
 end
 
 @kernel function coriolis_force_tendency_kernel!(tendency,
-                                                 @Const(normalVelocity),
-                                                 @Const(fᵉ),
-                                                 @Const(nEdgesOnEdge),
-                                                 @Const(edgesOnEdge),
-                                                 @Const(maxLevelEdgeTop),
-                                                 @Const(weightsOnEdge))
+                                                 normalVelocity,
+                                                 fᵉ,
+                                                 nEdgesOnEdge,
+                                                 edgesOnEdge,
+                                                 maxLevelEdgeTop,
+                                                 weightsOnEdge,
+                                                 ::Val{maxEdgesOnEdge},
+                                                 ::Val{nVertLevels}) where {maxEdgesOnEdge, nVertLevels}
     
     # global indices over nEdges
     iEdge = @index(Global, Linear)
@@ -62,7 +66,7 @@ end
     # fixed neighbour i are contiguous and coalesce into few cache lines (see the layout
     # note in read_edge_info). Indexing them [i, iEdge] here would reintroduce the strided,
     # L2-spilling access that made this kernel scale super-linearly on the GPU.
-    @inbounds for i in 1:nEdgesOnEdge[iEdge]
+    @inbounds for i in 1:maxEdgesOnEdge
 
         @inbounds eoe = edgesOnEdge[iEdge,i]
 
@@ -77,8 +81,12 @@ end
             # level does a single load (normalVelocity) + FMA instead of two loads
             # and two multiplies.
             @inbounds coef = weightsOnEdge[iEdge,i] * fᵉ[eoe]
-            @inbounds for k in 1:nLevels
-                tendency[k,iEdge] += coef * normalVelocity[k, eoe]
+            # Static vertical bound (compile-time `Val`) + `k <= nLevels` guard, so
+            # BOTH loops are statically sized and Enzyme's tape stays in registers.
+            @inbounds for k in 1:nVertLevels
+                if k <= nLevels
+                    tendency[k,iEdge] += coef * normalVelocity[k, eoe]
+                end
             end
         end
     end

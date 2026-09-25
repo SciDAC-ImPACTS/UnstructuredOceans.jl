@@ -20,23 +20,23 @@ end
 
 @kernel function DivergenceOnCell_P2(DivCell,
                                      VecEdge,
-                                     nEdgesOnCell,
                                      edgesOnCell,
                                      edgeSignOnCell,
-                                     areaCell) #::Val{n}, where {n}
+                                     areaCell,
+                                     ::Val{maxEdges}) where {maxEdges}
 
     iCell, k = @index(Global, NTuple)
 
     DivCell[k,iCell] = 0.0
 
-    # loop over number of edges in primary cell
-    for i in 1:nEdgesOnCell[iCell]
+    for i in 1:maxEdges
         @inbounds iEdge = edgesOnCell[i,iCell]
-        @inbounds DivCell[k,iCell] -= VecEdge[k,iEdge] * edgeSignOnCell[i,iCell]
+        if iEdge != 0
+            @inbounds DivCell[k,iCell] -= VecEdge[k,iEdge] * edgeSignOnCell[i,iCell]
+        end
     end
 
     DivCell[k,iCell] = DivCell[k,iCell] / areaCell[iCell]
-    # @synchronize()
 end
 
 @doc raw"""
@@ -71,11 +71,10 @@ function DivergenceOnCell!(DivCell, VecEdge, temp, Mesh::Mesh; nthreads=DEFAULT_
     
     kernel2!(DivCell,
              temp,
-             nEdgesOnCell,
              edgesOnCell,
              edgeSignOnCell,
              areaCell,
-             #ndrange=nCells)
+             Val(size(edgesOnCell, 1)),   # maxEdges as a compile-time constant
              ndrange=(nCells, nVertLevels))
 end
 
@@ -143,9 +142,8 @@ end
                               dcEdge,
                               edgeSignOnVertex,
                               areaTriangle,
-                              vertexDegree)
+                              ::Val{vertexDegree}) where {vertexDegree}
 
-    # global indicies over nVertices and vertexDegree
     iVertex, k = @index(Global, NTuple)
 
     CurlVertex[k, iVertex] = 0.0
@@ -155,14 +153,6 @@ end
     for j in 1:vertexDegree
         @inbounds @private iEdge = edgesOnVertex[j, iVertex]
 
-        # On a bounded mesh, boundary vertices have fewer than `vertexDegree` real
-        # edges; the missing slots are stored as edgesOnVertex == 0 (see the mesh
-        # setup loop in HorzMesh.jl, which skips them with `iEdge == 0 && continue`).
-        # edgeSignOnVertex is 0 there, so the contribution is zero anyway — but the
-        # loads dcEdge[0]/VecEdge[k,0] are still an out-of-bounds (index 0) read that
-        # ROCm/HIP traps as an illegal address (CUDA silently read adjacent memory).
-        # A structured `if iEdge != 0` (not `continue`) also differentiates correctly
-        # under Enzyme; see the identical guard in the Coriolis tendency kernel.
         if iEdge != 0
             @inbounds CurlVertex[k, iVertex] += dcEdge[iEdge] *
                                                 invAreaTriangle *
@@ -207,10 +197,9 @@ function CurlOnVertex!(CurlVertex, VecEdge, Mesh::Mesh; nthreads=DEFAULT_NTHREAD
             VecEdge,
             edgesOnVertex,
             dcEdge,
-            edgeSignOnVertex, 
+            edgeSignOnVertex,
             areaTriangle,
-            vertexDegree,
-            #ndrange=nVertices)
+            Val(vertexDegree),
             ndrange=(nVertices, nVertLevels))
 end
 
