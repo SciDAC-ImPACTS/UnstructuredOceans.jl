@@ -22,7 +22,7 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
 
     @unpack maxLevelEdge = VertMesh 
     @unpack nEdges, nEdgesOnEdge = Edges
-    @unpack weightsOnEdge, fᵉ, cellsOnEdge, edgesOnEdge = Edges
+    @unpack weightsOnEdge, fᵉ, cellsOnEdge, edgesOnEdge, boundaryEdge = Edges
 
     # get the current timelevel of normalVelocity
     normalVelocity = Prog.normalVelocity[end]
@@ -37,6 +37,7 @@ function horizontal_advection_and_coriolis_tendency!(Tend::TendencyVars,
             edgesOnEdge,
             maxLevelEdge.Top,
             weightsOnEdge,
+            boundaryEdge,
             Val(size(edgesOnEdge, 2)),   # maxEdgesOnEdge (edge-major: neighbour dim is 2)
             Val(VertMesh.nVertLevels),   # static vertical bound
             ndrange = nEdges)
@@ -52,6 +53,7 @@ end
                                                  edgesOnEdge,
                                                  maxLevelEdgeTop,
                                                  weightsOnEdge,
+                                                 boundaryEdge,
                                                  ::Val{maxEdgesOnEdge},
                                                  ::Val{nVertLevels}) where {maxEdgesOnEdge, nVertLevels}
     
@@ -66,6 +68,8 @@ end
     # fixed neighbour i are contiguous and coalesce into few cache lines (see the layout
     # note in read_edge_info). Indexing them [i, iEdge] here would reintroduce the strided,
     # L2-spilling access that made this kernel scale super-linearly on the GPU.
+    # No Coriolis tendency on wall edges (no-normal-flow), as in the other velocity tendencies.
+    @inbounds isWall = boundaryEdge[iEdge] == 1
     @inbounds for i in 1:maxEdgesOnEdge
 
         @inbounds eoe = edgesOnEdge[iEdge,i]
@@ -75,7 +79,7 @@ end
         # replayed, so the adjoint executed the body with eoe == 0 and scattered
         # into normalVelocity[k, 0] — an out-of-bounds (index 0) write that
         # triggered ERROR_ILLEGAL_ADDRESS. A structured branch differentiates correctly.
-        if eoe != 0
+        if eoe != 0 && !isWall
             # weightsOnEdge[iEdge,i] and fᵉ[eoe] are both invariant in k: fold them
             # into one per-neighbour coefficient outside the vertical loop so each
             # level does a single load (normalVelocity) + FMA instead of two loads
